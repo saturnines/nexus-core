@@ -332,7 +332,7 @@ destination:
 		t.Fatal("Expected validation error for invalid field mapping, but got none")
 	}
 
-	// Check that the error mentions the non existent field
+	// Check that the error mentions the non-existent field
 	if errorMsg := err.Error(); !strings.Contains(errorMsg, "username") {
 		t.Errorf("Error should mention non-existent field 'username', got: %s", errorMsg)
 	}
