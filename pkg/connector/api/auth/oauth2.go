@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"Nexus/pkg/connector/api"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -67,7 +68,10 @@ func (o *OAuth2Auth) ApplyAuth(req *http.Request) error {
 	// Check if we need to get a token (first time or expired)
 	if o.accessToken == "" || time.Now().After(o.expiresAt) {
 		if err := o.refreshAccessToken(); err != nil {
-			return fmt.Errorf("failed to get OAuth2 token: %w", err)
+			if time.Now().After(o.expiresAt) {
+				return api.WrapError(err, api.ErrTokenExpired, "token expired and refresh failed")
+			}
+			return api.WrapError(err, api.ErrAuthentication, "failed to get OAuth2 token")
 		}
 	}
 
