@@ -15,7 +15,7 @@ import (
 
 // Connector is a main API connector that adapts to configuration
 type Connector struct {
-	client            *http.Client
+	httpClient        HTTPDoer // Changed from *http.Client to HTTPDoer
 	baseURL           string
 	headers           map[string]string
 	config            *config.Pipeline
@@ -23,8 +23,11 @@ type Connector struct {
 	paginationHandler pagination.Handler // Interface from pagination/pagination.go
 }
 
+// ConnectorOption defines options for the connector
+type ConnectorOption func(*Connector)
+
 // NewConnector creates a new API connector with configuration based components
-func NewConnector(cfg *config.Pipeline) (*Connector, error) {
+func NewConnector(cfg *config.Pipeline, options ...ConnectorOption) (*Connector, error) {
 	// Validate the config
 	if cfg.Source.Type != config.SourceTypeREST {
 		return nil, fmt.Errorf("unsupported source type: %s", cfg.Source.Type)
@@ -32,10 +35,17 @@ func NewConnector(cfg *config.Pipeline) (*Connector, error) {
 
 	// Create simple connector
 	connector := &Connector{
-		client:  &http.Client{},
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 		baseURL: cfg.Source.Endpoint,
 		headers: cfg.Source.Headers,
 		config:  cfg,
+	}
+
+	// Apply options
+	for _, option := range options {
+		option(connector)
 	}
 
 	// Set up auth if configured
@@ -61,6 +71,12 @@ func NewConnector(cfg *config.Pipeline) (*Connector, error) {
 	return connector, nil
 }
 
+func WithConnectorHTTPOptions(options ...HTTPClientOption) ConnectorOption {
+	return func(c *Connector) {
+		c.httpClient = ApplyHTTPClientOptions(c.httpClient, options...)
+	}
+}
+
 // Extract performs data extraction with all configured components
 func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, error) {
 	var allResults []map[string]interface{}
@@ -81,8 +97,8 @@ func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, erro
 			}
 		}
 
-		// Execute request
-		resp, err := c.client.Do(req)
+		// Execute request using the HTTPDoer interface
+		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("request failed: %w", err)
 		}
@@ -126,7 +142,7 @@ func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, erro
 
 // createRequest builds the HTTP request with params
 func (c *Connector) createRequest(ctx context.Context, page interface{}) (*http.Request, error) {
-	// Create base request
+	// Use http.NewRequestWithContext instead of http.NewRequest
 	req, err := http.NewRequestWithContext(ctx, c.config.Source.Method, c.baseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -171,6 +187,33 @@ func (c *Connector) processResponse(resp *http.Response) (map[string]interface{}
 	return responseData, items, nil
 }
 
+// extractItems extracts the array of items from the response data
+func (c *Connector) extractItems(responseData map[string]interface{}) ([]interface{}, error) {
+	// If no root path is specified, use the entire response
+	if c.config.Source.ResponseMapping.RootPath == "" {
+		// Check if the response is already an array
+		if items, ok := responseData["items"].([]interface{}); ok {
+			return items, nil
+		}
+		// Otherwise, treat the response itself as a single item
+		return []interface{}{responseData}, nil
+	}
+
+	// Extract items using the specified root path
+	root, ok := ExtractField(responseData, c.config.Source.ResponseMapping.RootPath)
+	if !ok {
+		return nil, fmt.Errorf("root path '%s' not found in response", c.config.Source.ResponseMapping.RootPath)
+	}
+
+	// Convert to array of items
+	items, ok := root.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("root path '%s' is not an array", c.config.Source.ResponseMapping.RootPath)
+	}
+
+	return items, nil
+}
+
 // extractFields extracts specific fields from items based on mapping
 func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}, error) {
 	var results []map[string]interface{}
@@ -183,9 +226,13 @@ func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}
 
 		extractedItem := make(map[string]interface{})
 		for _, field := range c.config.Source.ResponseMapping.Fields {
-			value, err := c.extractField(itemMap, field.Path)
-			if err != nil {
-				return nil, fmt.Errorf("failed to extract field %s: %w", field.Name, err)
+			value, ok := ExtractField(itemMap, field.Path)
+			if !ok {
+				// Use default value if specified, otherwise skip
+				if field.DefaultValue != nil {
+					extractedItem[field.Name] = field.DefaultValue
+				}
+				continue
 			}
 			extractedItem[field.Name] = value
 		}
@@ -194,18 +241,4 @@ func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}
 	}
 
 	return results, nil
-}
-
-// Keep your existing extractItems and extractField methods...
-
-// WithTimeout sets the request timeout
-func (c *Connector) WithTimeout(timeout time.Duration) *Connector {
-	c.client.Timeout = timeout
-	return c
-}
-
-// WithHTTPClient sets a custom HTTP client
-func (c *Connector) WithHTTPClient(client *http.Client) *Connector {
-	c.client = client
-	return c
 }
