@@ -87,32 +87,32 @@ func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, erro
 		// Create request
 		req, err := c.createRequest(ctx, currentPage)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create request: %w", err)
+			return nil, WrapError(err, ErrHTTPRequest, "failed to create request")
 		}
 
 		// Apply authentication if configured
 		if c.authHandler != nil {
 			if err := c.authHandler.ApplyAuth(req); err != nil {
-				return nil, fmt.Errorf("authentication error: %w", err)
+				return nil, WrapError(err, ErrAuthentication, "failed to apply authentication")
 			}
 		}
 
 		// Execute request using the HTTPDoer interface
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("request failed: %w", err)
+			return nil, WrapError(err, ErrHTTPRequest, "request failed")
 		}
 
 		// Process response and get data
 		responseData, items, err := c.processResponse(resp)
 		if err != nil {
-			return nil, err
+			return nil, WrapError(err, ErrHTTPResponse, "failed to process response")
 		}
 
 		// Extract fields from items
 		pageResults, err := c.extractFields(items)
 		if err != nil {
-			return nil, err
+			return nil, WrapError(err, ErrExtraction, "failed to extract fields")
 		}
 
 		// Add results from this page
@@ -126,7 +126,7 @@ func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, erro
 		// Get next page information
 		hasNextPage, nextPage, err := c.paginationHandler.GetNextPage(responseData, currentPage)
 		if err != nil {
-			return nil, fmt.Errorf("pagination error: %w", err)
+			return nil, WrapError(err, ErrPagination, "failed to get next page")
 		}
 
 		if !hasNextPage {
@@ -169,13 +169,17 @@ func (c *Connector) processResponse(resp *http.Response) (map[string]interface{}
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+		return nil, nil, WrapError(
+			fmt.Errorf("API returned status %d", resp.StatusCode),
+			ErrHTTPResponse,
+			"unexpected status code",
+		)
 	}
 
 	// Parse response
 	var responseData map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
-		return nil, nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, nil, WrapError(err, ErrHTTPResponse, "failed to decode response")
 	}
 
 	// Extract items based on root path
@@ -202,7 +206,11 @@ func (c *Connector) extractItems(responseData map[string]interface{}) ([]interfa
 	// Extract items using the specified root path
 	root, ok := ExtractField(responseData, c.config.Source.ResponseMapping.RootPath)
 	if !ok {
-		return nil, fmt.Errorf("root path '%s' not found in response", c.config.Source.ResponseMapping.RootPath)
+		return nil, WrapError(
+			fmt.Errorf("root path '%s' not found", c.config.Source.ResponseMapping.RootPath),
+			ErrExtraction,
+			"missing root path",
+		)
 	}
 
 	// Convert to array of items
