@@ -14,11 +14,12 @@ import (
 // OAuth2Auth implements the interface for OAuth 2.0 authentication
 type OAuth2Auth struct {
 	// Configuration
-	TokenURL     string            // OAuth2 token endpoint URL
-	ClientID     string            // OAuth2 client ID
-	ClientSecret string            // OAuth2 client secret
-	Scope        string            // Optional scope for the token
-	ExtraParams  map[string]string // more parameters for token requests
+	TokenURL      string            // OAuth2 token endpoint URL
+	ClientID      string            // OAuth2 client ID
+	ClientSecret  string            // OAuth2 client secret
+	Scope         string            // Optional scope for the token
+	ExtraParams   map[string]string // more parameters for token requests
+	RefreshBefore int               // Seconds before expiry to refresh token
 
 	// Token state
 	accessToken  string     // current access token
