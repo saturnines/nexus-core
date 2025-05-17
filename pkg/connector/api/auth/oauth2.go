@@ -147,10 +147,10 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 	}
 
 	if tokenResp.ExpiresIn > 0 {
-		// Use the configurable refresh margin instead of hardcoded 60 seconds
+		// Use the configurable refresh margin
 		o.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn-refreshBefore) * time.Second)
 	} else {
-		// If no expiry provided, assume 1 hour
+		// If no expiry provided default to 1 hour
 		o.expiresAt = time.Now().Add(1 * time.Hour)
 	}
 
