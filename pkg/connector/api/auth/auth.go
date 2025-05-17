@@ -5,7 +5,12 @@ import (
 	"net/http"
 )
 
-// APIKeyAuth HANDLES  the  interface for API key authentication
+// Handler defines the interface for auth handlers
+type Handler interface {
+	ApplyAuth(req *http.Request) error
+}
+
+// APIKeyAuth implements the Handler interface for API key authentication
 type APIKeyAuth struct {
 	HeaderName string // Header name for header-based auth (e.g., "X-API-Key")
 	QueryParam string // Query parameter name for query-based auth (e.g., "api_key")
@@ -49,7 +54,6 @@ func (a *APIKeyAuth) ApplyAuth(req *http.Request) error {
 	return nil
 }
 
-// Debugging Function
 // String returns a string representation of this auth method
 func (a *APIKeyAuth) String() string {
 	if a.HeaderName != "" {
