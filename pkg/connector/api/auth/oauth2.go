@@ -140,12 +140,17 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 		o.refreshToken = tokenResp.RefreshToken
 	}
 
-	// Calculate token expiry with a safety margin
+	// Calculate token expiry
+	refreshBefore := 60 // Default 60 seconds if not set
+	if o.RefreshBefore > 0 {
+		refreshBefore = o.RefreshBefore
+	}
+
 	if tokenResp.ExpiresIn > 0 {
-		// Subtract 60 seconds as a buffer (test and change maybe?)
-		o.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn-60) * time.Second)
+		// Use the configurable refresh margin instead of hardcoded 60 seconds
+		o.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn-refreshBefore) * time.Second)
 	} else {
-		// If no expiry provided, assume 1 hour (change if it doesn't work)
+		// If no expiry provided, assume 1 hour
 		o.expiresAt = time.Now().Add(1 * time.Hour)
 	}
 
