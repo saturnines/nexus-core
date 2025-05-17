@@ -38,7 +38,7 @@ type TokenResponse struct {
 }
 
 // NewOAuth2Auth creates a new OAuth2 auth handler
-func NewOAuth2Auth(tokenURL, clientID, clientSecret, scope string, extraParams map[string]string) (*OAuth2Auth, error) {
+func NewOAuth2Auth(tokenURL, clientID, clientSecret, scope string, extraParams map[string]string, refreshBefore int) (*OAuth2Auth, error) {
 	if tokenURL == "" {
 		return nil, fmt.Errorf("token URL is required for OAuth2")
 	}
@@ -50,11 +50,12 @@ func NewOAuth2Auth(tokenURL, clientID, clientSecret, scope string, extraParams m
 	}
 
 	return &OAuth2Auth{
-		TokenURL:     tokenURL,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		Scope:        scope,
-		ExtraParams:  extraParams,
+		TokenURL:      tokenURL,
+		ClientID:      clientID,
+		ClientSecret:  clientSecret,
+		Scope:         scope,
+		ExtraParams:   extraParams,
+		RefreshBefore: refreshBefore,
 	}, nil
 }
 
