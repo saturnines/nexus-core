@@ -1,11 +1,11 @@
-package api
+package errors
 
 import (
 	"errors"
 	"fmt"
 )
 
-// standard error types
+// Standard error types
 var (
 	ErrAuthentication = errors.New("authentication error")
 	ErrConfiguration  = errors.New("configuration error")
@@ -17,7 +17,18 @@ var (
 	ErrValidation     = errors.New("validation error")
 )
 
-// WrapError wraps an error with types
+// WrapError wraps an error with a standard error type
 func WrapError(err error, errType error, message string) error {
-	return fmt.Errorf("%w: %s: %w", errType, message, err)
+	wrapped := fmt.Errorf("%s: %w", message, err)
+	return fmt.Errorf("%w: %v", errType, wrapped)
+}
+
+// Is provides a convenience wrapper around errors.Is
+func Is(err, target error) bool {
+	return errors.Is(err, target)
+}
+
+// Unwrap provides a convenience wrapper around errors.Unwrap
+func Unwrap(err error) error {
+	return errors.Unwrap(err)
 }
