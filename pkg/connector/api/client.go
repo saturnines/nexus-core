@@ -1,7 +1,7 @@
 package api
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,7 +11,7 @@ import (
 
 // APIClient struct
 type APIClient struct {
-	httpClient *http.Client
+	httpClient HTTPDoer
 	baseURL    string
 	headers    map[string]string
 	rateLimit  int
@@ -38,10 +38,9 @@ func NewClient(baseURL string, options ...ClientOption) *APIClient {
 	return client
 }
 
-// WithTimeout time out
-func WithTimeout(timeout time.Duration) ClientOption {
+func WithClientHTTPOptions(options ...HTTPClientOption) ClientOption {
 	return func(c *APIClient) {
-		c.httpClient.Timeout = timeout
+		c.httpClient = ApplyHTTPClientOptions(c.httpClient, options...)
 	}
 }
 
@@ -53,36 +52,19 @@ func WithHeader(key, value string) ClientOption {
 }
 
 // Get performs a GET request to the specified endpoint
-func (c *APIClient) Get(endpoint string) (*http.Response, error) {
-	return c.Request(http.MethodGet, endpoint, nil)
+func (c *APIClient) Get(ctx context.Context, endpoint string) (*http.Response, error) {
+	return c.Request(ctx, http.MethodGet, endpoint, nil)
+}
+
+// Post performs a POST request with JSON body
+func (c *APIClient) Post(ctx context.Context, endpoint string, body []byte) (*http.Response, error) {
+	return c.Request(ctx, http.MethodPost, endpoint, body)
 }
 
 // Request performs an HTTP request with whatever method to the endpoint
-func (c *APIClient) Request(method, endpoint string, body []byte) (*http.Response, error) {
-	url := fmt.Sprintf("%s%s", c.baseURL, endpoint)
-
-	var bodyReader io.Reader
-	if body != nil {
-		bodyReader = bytes.NewReader(body)
-	}
-
-	req, err := http.NewRequest(method, url, bodyReader)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Add default headers
-	for key, value := range c.headers {
-		req.Header.Set(key, value)
-	}
-
-	// All requests with a body are JSON, set Content-Type header
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	return c.httpClient.Do(req)
+func (c *APIClient) Request(ctx context.Context, method, endpoint string, body []byte) (*http.Response, error) {
+	// Use the shared RequestHelper
+	return RequestHelper(ctx, c.httpClient, method, c.baseURL, endpoint, c.headers, body)
 }
 
 // ExtractJSON extracts JSON data from an HTTP response into the provided target
