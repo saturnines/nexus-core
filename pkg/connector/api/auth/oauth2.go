@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"Nexus/pkg/connector/api"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +10,15 @@ import (
 	"sync"
 	"time"
 )
+
+// TokenRefreshError represents a token refresh failure
+type TokenRefreshError struct {
+	Cause error
+}
+
+func (e *TokenRefreshError) Error() string {
+	return fmt.Sprintf("token refresh failed: %v", e.Cause)
+}
 
 // OAuth2Auth implements the interface for OAuth 2.0 authentication
 type OAuth2Auth struct {
@@ -69,9 +77,9 @@ func (o *OAuth2Auth) ApplyAuth(req *http.Request) error {
 	if o.accessToken == "" || time.Now().After(o.expiresAt) {
 		if err := o.refreshAccessToken(); err != nil {
 			if time.Now().After(o.expiresAt) {
-				return api.WrapError(err, api.ErrTokenExpired, "token expired and refresh failed")
+				return &TokenRefreshError{Cause: err}
 			}
-			return api.WrapError(err, api.ErrAuthentication, "failed to get OAuth2 token")
+			return fmt.Errorf("failed to get OAuth2 token: %w", err)
 		}
 	}
 
