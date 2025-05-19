@@ -3,6 +3,7 @@
 package auth
 
 import (
+	"Nexus/pkg/config"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -232,7 +233,8 @@ func TestOAuth2Auth(t *testing.T) {
 		extraParams := map[string]string{
 			"extra_param": "extra_value",
 		}
-		auth, _ := NewOAuth2Auth(mockServer.URL, "test-client", "test-secret", "read write", extraParams)
+		// Add the refreshBefore parameter (60 seconds)
+		auth, _ := NewOAuth2Auth(mockServer.URL, "test-client", "test-secret", "read write", extraParams, 60)
 		req, _ := http.NewRequest("GET", "https://api.example.com/data", nil)
 
 		// Apply auth should get a token from mock
@@ -286,8 +288,8 @@ func TestOAuth2Auth(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		// Create OAuth2Auth
-		auth, _ := NewOAuth2Auth(mockServer.URL, "test-client", "test-secret", "read", nil)
+		// Create OAuth2Auth with refreshBefore parameter
+		auth, _ := NewOAuth2Auth(mockServer.URL, "test-client", "test-secret", "read", nil, 60)
 
 		// First request should get initial token
 		req1, _ := http.NewRequest("GET", "https://api.example.com/data", nil)
@@ -322,8 +324,8 @@ func TestOAuth2Auth(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		// Create OAuth2Auth
-		auth, _ := NewOAuth2Auth(mockServer.URL, "bad-client", "bad-secret", "", nil)
+		// Create OAuth2Auth with refreshBefore parameter
+		auth, _ := NewOAuth2Auth(mockServer.URL, "bad-client", "bad-secret", "", nil, 60)
 		req, _ := http.NewRequest("GET", "https://api.example.com/data", nil)
 
 		// Apply auth should fail here
@@ -332,7 +334,7 @@ func TestOAuth2Auth(t *testing.T) {
 	})
 
 	t.Run("StringMethod", func(t *testing.T) {
-		auth, _ := NewOAuth2Auth("https://auth.example.com/token", "client-id", "client-secret", "read", nil)
+		auth, _ := NewOAuth2Auth("https://auth.example.com/token", "client-id", "client-secret", "read", nil, 60)
 		str := auth.String()
 		if !strings.Contains(str, "client-id") {
 			t.Errorf("String() should contain client ID, got: %s", str)
@@ -343,5 +345,32 @@ func TestOAuth2Auth(t *testing.T) {
 	})
 }
 
-// TODO Add tests for the factory function
-// func TestCreateHandler(t *testing.T) {...}
+// Test for the factory function
+func TestCreateHandler(t *testing.T) {
+	// Define a simple test for the factory function to get started
+	t.Run("BasicAuthCreation", func(t *testing.T) {
+		authConfig := &config.Auth{
+			Type: config.AuthTypeBasic,
+			Basic: &config.BasicAuth{
+				Username: "user",
+				Password: "pass",
+			},
+		}
+
+		handler, err := CreateHandler(authConfig)
+		if err != nil {
+			t.Fatalf("CreateHandler failed: %v", err)
+		}
+
+		basicAuth, ok := handler.(*BasicAuth)
+		if !ok {
+			t.Fatalf("Expected *BasicAuth, got %T", handler)
+		}
+
+		if basicAuth.Username != "user" || basicAuth.Password != "pass" {
+			t.Errorf("Auth not properly configured: %+v", basicAuth)
+		}
+	})
+
+	// Additional test cases could be added here for other auth types
+}
