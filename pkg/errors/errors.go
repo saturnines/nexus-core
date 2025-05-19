@@ -1,3 +1,5 @@
+// pkg/errors/errors.go
+
 package errors
 
 import (
@@ -17,18 +19,24 @@ var (
 	ErrValidation     = errors.New("validation error")
 )
 
-// WrapError wraps an error with a standard error type
+// WrapError wraps an error with a standard error type and a message
 func WrapError(err error, errType error, message string) error {
 	wrapped := fmt.Errorf("%s: %w", message, err)
 	return fmt.Errorf("%w: %v", errType, wrapped)
 }
 
-// Is provides a convenience wrapper around errors.Is
+// Is checks if an error is or contains the target error
 func Is(err, target error) bool {
 	return errors.Is(err, target)
 }
 
-// Unwrap provides a convenience wrapper around errors.Unwrap
+// Unwrap returns the wrapped error
 func Unwrap(err error) error {
 	return errors.Unwrap(err)
+}
+
+// As finds the first error in errors chain that matches target, and if so, sets
+// target to that error value and returns true. Otherwise, it returns false.
+func As(err error, target interface{}) bool {
+	return errors.As(err, target)
 }
