@@ -168,4 +168,5 @@ type Schema struct {
 	Required   bool     `yaml:"required,omitempty"`    // Whether field is required
 	Unique     bool     `yaml:"unique,omitempty"`      // Whether field must be unique
 	Validators []string `yaml:"validators,omitempty"`  // Validation rules
+
 }
