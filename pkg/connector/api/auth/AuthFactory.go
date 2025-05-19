@@ -2,6 +2,7 @@ package auth
 
 import (
 	"Nexus/pkg/config"
+	"Nexus/pkg/errors"
 	"fmt"
 )
 
@@ -23,7 +24,7 @@ func CreateHandler(authConfig *config.Auth) (Handler, error) {
 			refreshBefore = authConfig.OAuth2.RefreshBefore
 		}
 
-		return NewOAuth2Auth(
+		authHandler, err := NewOAuth2Auth(
 			authConfig.OAuth2.TokenURL,
 			authConfig.OAuth2.ClientID,
 			authConfig.OAuth2.ClientSecret,
@@ -32,7 +33,17 @@ func CreateHandler(authConfig *config.Auth) (Handler, error) {
 			refreshBefore,
 		)
 
+		if err != nil {
+			return nil, errors.WrapError(err, errors.ErrConfiguration, "failed to create OAuth2 handler")
+		}
+
+		return authHandler, nil
+
 	default:
-		return nil, fmt.Errorf("unsupported auth type: %s", authConfig.Type)
+		return nil, errors.WrapError(
+			fmt.Errorf("unsupported auth type: %s", authConfig.Type),
+			errors.ErrConfiguration,
+			"invalid auth type",
+		)
 	}
 }
