@@ -372,5 +372,132 @@ func TestCreateHandler(t *testing.T) {
 		}
 	})
 
-	// Additional test cases could be added here for other auth types
+	// For future reference If I were to add new tests just add more tests for diff auth types
+	t.Run("APIKeyAuthCreation", func(t *testing.T) {
+		authConfig := &config.Auth{
+			Type: config.AuthTypeAPIKey,
+			APIKey: &config.APIKeyAuth{
+				Header:     "X-API-Key",
+				QueryParam: "",
+				Value:      "test-api-key",
+			},
+		}
+
+		handler, err := CreateHandler(authConfig)
+		if err != nil {
+			t.Fatalf("CreateHandler failed: %v", err)
+		}
+
+		apiKeyAuth, ok := handler.(*APIKeyAuth)
+		if !ok {
+			t.Fatalf("Expected *APIKeyAuth, got %T", handler)
+		}
+
+		if apiKeyAuth.HeaderName != "X-API-Key" || apiKeyAuth.Value != "test-api-key" {
+			t.Errorf("Auth not properly configured: %+v", apiKeyAuth)
+		}
+	})
+
+	t.Run("BearerAuthCreation", func(t *testing.T) {
+		authConfig := &config.Auth{
+			Type: config.AuthTypeBearer,
+			Bearer: &config.BearerAuth{
+				Token: "test-token",
+			},
+		}
+
+		handler, err := CreateHandler(authConfig)
+		if err != nil {
+			t.Fatalf("CreateHandler failed: %v", err)
+		}
+
+		bearerAuth, ok := handler.(*BearerAuth)
+		if !ok {
+			t.Fatalf("Expected *BearerAuth, got %T", handler)
+		}
+
+		if bearerAuth.Token != "test-token" {
+			t.Errorf("Auth not properly configured: %+v", bearerAuth)
+		}
+	})
+
+	t.Run("OAuth2AuthCreation", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{
+                "access_token": "test-access-token",
+                "token_type": "Bearer",
+                "expires_in": 3600
+            }`))
+		}))
+		defer mockServer.Close()
+
+		authConfig := &config.Auth{
+			Type: config.AuthTypeOAuth2,
+			OAuth2: &config.OAuth2Auth{
+				TokenURL:     mockServer.URL,
+				ClientID:     "client-id",
+				ClientSecret: "client-secret",
+				Scope:        "read write",
+			},
+		}
+
+		handler, err := CreateHandler(authConfig)
+		if err != nil {
+			t.Fatalf("CreateHandler failed: %v", err)
+		}
+
+		oauth2Auth, ok := handler.(*OAuth2Auth)
+		if !ok {
+			t.Fatalf("Expected *OAuth2Auth, got %T", handler)
+		}
+
+		if oauth2Auth.ClientID != "client-id" || oauth2Auth.TokenURL != mockServer.URL {
+			t.Errorf("Auth not properly configured: %+v", oauth2Auth)
+		}
+	})
+
+	t.Run("UnsupportedAuthType", func(t *testing.T) {
+		authConfig := &config.Auth{
+			Type: config.AuthType("unsupported"),
+		}
+
+		_, err := CreateHandler(authConfig)
+		if err == nil {
+			t.Fatal("Expected error for unsupported auth type, got nil")
+		}
+	})
+}
+
+// Add a test for the new registry based  capability
+func TestRegisterAuthHandler(t *testing.T) {
+
+	customType := config.AuthType("custom")
+
+	// Register a handler
+	RegisterAuthHandler(customType, func(cfg *config.Auth) (Handler, error) {
+		return NewBasicAuth("custom", "secret"), nil
+	})
+
+	// Configure auth with custom type
+	authConfig := &config.Auth{
+		Type: customType,
+	}
+
+	// Try to create the handler
+	handler, err := CreateHandler(authConfig)
+	if err != nil {
+		t.Fatalf("Failed to create custom handler: %v", err)
+	}
+
+	// Verify the handler
+	customHandler, ok := handler.(*BasicAuth)
+	if !ok {
+		t.Fatal("Custom handler is not a BasicAuth")
+	}
+
+	if customHandler.Username != "custom" || customHandler.Password != "secret" {
+		t.Error("Custom handler has incorrect values")
+	}
 }
