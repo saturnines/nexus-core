@@ -3,47 +3,30 @@ package auth
 import (
 	"Nexus/pkg/config"
 	"Nexus/pkg/errors"
-	"fmt"
 )
 
-// CreateHandler creates an auth handler based on configuration
-func CreateHandler(authConfig *config.Auth) (Handler, error) {
-	switch authConfig.Type {
-	case config.AuthTypeBasic:
-		return NewBasicAuth(authConfig.Basic.Username, authConfig.Basic.Password), nil
-
-	case config.AuthTypeAPIKey:
-		return NewAPIKeyAuth(authConfig.APIKey.Header, authConfig.APIKey.QueryParam, authConfig.APIKey.Value), nil
-
-	case config.AuthTypeBearer:
-		return NewBearerAuth(authConfig.Bearer.Token), nil
-
-	case config.AuthTypeOAuth2:
-		refreshBefore := 60 // Default
-		if authConfig.OAuth2.RefreshBefore > 0 {
-			refreshBefore = authConfig.OAuth2.RefreshBefore
-		}
-
-		authHandler, err := NewOAuth2Auth(
-			authConfig.OAuth2.TokenURL,
-			authConfig.OAuth2.ClientID,
-			authConfig.OAuth2.ClientSecret,
-			authConfig.OAuth2.Scope,
-			authConfig.OAuth2.ExtraParams,
-			refreshBefore,
-		)
-
-		if err != nil {
-			return nil, errors.WrapError(err, errors.ErrConfiguration, "failed to create OAuth2 handler")
-		}
-
-		return authHandler, nil
-
-	default:
+// CreateHandlerWithRegistry creates an auth handler using the provided registry
+func CreateHandlerWithRegistry(registry *AuthRegistry, authConfig *config.Auth) (Handler, error) {
+	handler, err := registry.Create(authConfig)
+	if err != nil {
 		return nil, errors.WrapError(
-			fmt.Errorf("unsupported auth type: %s", authConfig.Type),
+			err,
 			errors.ErrConfiguration,
-			"invalid auth type",
+			"failed to create auth handler",
 		)
 	}
+	return handler, nil
+}
+
+// For backward compatibility
+var defaultRegistry = NewAuthRegistry()
+
+// CreateHandler creates an auth handler based on configuration using the default registry
+func CreateHandler(authConfig *config.Auth) (Handler, error) {
+	return CreateHandlerWithRegistry(defaultRegistry, authConfig)
+}
+
+// RegisterAuthHandler allows registering custom auth handlers to the default registry
+func RegisterAuthHandler(authType config.AuthType, creator AuthCreator) {
+	defaultRegistry.Register(authType, creator)
 }
