@@ -1,4 +1,2 @@
-personal take on a generalised ELT, hahah api go in database out
+A configurable API data extractor I'm building for a future project, handles auth/pagination/field mapping and spits out structured data. This is just a fun learning exercise. :)
 
-
-This is just a fun learning exercise. :)
