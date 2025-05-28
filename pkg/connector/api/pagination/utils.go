@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+// if for some reason an api has unexpected pagination handling just add it here.
+
 // parseBody reads and parses JSON into a generic map.
 func parseBody(resp *http.Response) (map[string]interface{}, error) {
 	defer resp.Body.Close()
