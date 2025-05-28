@@ -40,7 +40,6 @@ func (p *LinkPager) UpdateState(resp *http.Response) error {
 	return nil
 }
 
-// parseLinkHeader splits and maps rels.
 func parseLinkHeader(header string) map[string]string {
 	parts := strings.Split(header, ",")
 	links := make(map[string]string, len(parts))
