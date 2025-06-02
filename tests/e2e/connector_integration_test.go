@@ -264,7 +264,7 @@ func TestConnector_SlowResponse(t *testing.T) {
 	}
 }
 
-// TEST 6: Different Response Structures (No items key)
+// TEST 6: Different Response Structures
 func TestConnector_DifferentResponseStructure(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Response is a single object, not an arr
@@ -317,7 +317,7 @@ func TestConnector_DifferentResponseStructure(t *testing.T) {
 	}
 }
 
-// TEST 7: Pagination Test - Page-based
+// TEST 7: Pagination Test Page based
 func TestConnector_PagePagination(t *testing.T) {
 	pageRequests := 0
 
