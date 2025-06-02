@@ -70,6 +70,7 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 	return c, nil
 }
 
+// This isn't used.
 // WithConnectorHTTPOptions applies custom HTTP client options.
 func WithConnectorHTTPOptions(options ...HTTPClientOption) ConnectorOption {
 	return func(c *Connector) {
@@ -77,6 +78,7 @@ func WithConnectorHTTPOptions(options ...HTTPClientOption) ConnectorOption {
 	}
 }
 
+// This isn't used.
 // WithPaginationFactory allows supplying a custom pagination.Factory.
 func WithPaginationFactory(f *pagination.Factory) ConnectorOption {
 	return func(c *Connector) {
