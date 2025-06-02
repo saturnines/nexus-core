@@ -23,7 +23,17 @@ func (p *LinkPager) NextRequest() (*http.Request, error) {
 	if p.nextURL == "" {
 		return nil, nil
 	}
-	u, err := url.Parse(p.nextURL)
+
+	var u *url.URL
+	var err error
+
+	// Handle relative URLs by resolving against base URL
+	if strings.HasPrefix(p.nextURL, "/") {
+		u, err = p.BaseReq.URL.Parse(p.nextURL)
+	} else {
+		u, err = url.Parse(p.nextURL)
+	}
+
 	if err != nil {
 		return nil, err
 	}
