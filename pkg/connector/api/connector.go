@@ -194,7 +194,7 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 	case config.PaginationTypeOffset:
 		opts["offsetParam"] = p.OffsetParam
 		opts["sizeParam"] = p.LimitParam
-		opts["hasMorePath"] = p.TotalCountPath
+		opts["hasMorePath"] = p.HasMorePath
 		opts["initOffset"] = 0
 		opts["pageSize"] = p.OffsetIncrement
 
