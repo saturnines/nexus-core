@@ -35,8 +35,9 @@ func (p *LinkPager) NextRequest() (*http.Request, error) {
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
+
 	req := p.BaseReq.Clone(p.BaseReq.Context())
 	req.URL = u
 	return req, nil
