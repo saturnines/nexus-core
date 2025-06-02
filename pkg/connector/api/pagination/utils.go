@@ -8,7 +8,6 @@ import (
 )
 
 // if for some reason an api has unexpected pagination handling just add it here.
-
 // parseBody reads and parses JSON into a generic map.
 func parseBody(resp *http.Response) (map[string]interface{}, error) {
 	defer resp.Body.Close()
@@ -17,7 +16,6 @@ func parseBody(resp *http.Response) (map[string]interface{}, error) {
 	return data, err
 }
 
-// lookupString drills into a nested map by a dotted path and returns a string.
 func lookupString(body map[string]interface{}, path string) (string, error) {
 	parts := strings.Split(path, ".")
 	var cur interface{} = body
@@ -31,6 +29,12 @@ func lookupString(body map[string]interface{}, path string) (string, error) {
 			return "", fmt.Errorf("lookupString: missing field %q", key)
 		}
 	}
+
+	// Handle null values
+	if cur == nil {
+		return "", nil // Treat null as empty string should stop pagination
+	}
+
 	s, ok := cur.(string)
 	if !ok {
 		return "", fmt.Errorf("lookupString: field %q is not a string", path)
