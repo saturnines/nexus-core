@@ -371,12 +371,15 @@ func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}
 		mapped := make(map[string]interface{})
 		for _, field := range c.config.Source.ResponseMapping.Fields {
 			value, ok := ExtractField(itemMap, field.Path)
-			if !ok {
+
+			// Check if field is missing OR null
+			if !ok || value == nil {
 				if field.DefaultValue != nil {
 					mapped[field.Name] = field.DefaultValue
 				}
 				continue
 			}
+
 			mapped[field.Name] = value
 		}
 
