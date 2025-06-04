@@ -666,3 +666,259 @@ func TestConnector_PagePagination_TotalPages_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TEST 10: Missing root path with nested data structure
+func TestConnector_MissingRootPath_NestedData(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Response with nested structure: data.users array
+		response := map[string]interface{}{
+			"status": "success",
+			"data": map[string]interface{}{
+				"users": []interface{}{
+					map[string]interface{}{
+						"id":       1,
+						"username": "alice",
+						"profile": map[string]interface{}{
+							"email": "alice@example.com",
+							"role":  "admin",
+						},
+					},
+					map[string]interface{}{
+						"id":       2,
+						"username": "bob",
+						"profile": map[string]interface{}{
+							"email": "bob@example.com",
+							"role":  "user",
+						},
+					},
+					map[string]interface{}{
+						"id":       3,
+						"username": "charlie",
+						"profile": map[string]interface{}{
+							"email": "charlie@example.com",
+							"role":  "user",
+						},
+					},
+				},
+				"total_count": 3,
+				"page_info": map[string]interface{}{
+					"current_page": 1,
+					"total_pages":  1,
+				},
+			},
+			"timestamp": "2023-01-01T00:00:00Z",
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Pipeline{
+		Name: "nested-root-path-test",
+		Source: config.Source{
+			Type:     config.SourceTypeREST,
+			Endpoint: mockServer.URL,
+			ResponseMapping: config.ResponseMapping{
+				RootPath: "data.users", // Deep nested path to users array
+				Fields: []config.Field{
+					{Name: "user_id", Path: "id"},
+					{Name: "username", Path: "username"},
+					{Name: "email", Path: "profile.email"}, // Nested field extraction
+					{Name: "role", Path: "profile.role"},   // Nested field extraction
+				},
+			},
+		},
+	}
+
+	connector, err := api.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create connector: %v", err)
+	}
+
+	ctx := context.Background()
+	results, err := connector.Extract(ctx)
+	if err != nil {
+		t.Fatalf("Extract failed: %v", err)
+	}
+
+	// Should extract 3 users from data.users array
+	if len(results) != 3 {
+		t.Fatalf("Expected 3 results, got %d", len(results))
+	}
+
+	// Verify first user
+	firstUser := results[0]
+	if firstUser["user_id"] != float64(1) {
+		t.Errorf("Expected user_id=1, got %v", firstUser["user_id"])
+	}
+	if firstUser["username"] != "alice" {
+		t.Errorf("Expected username='alice', got %v", firstUser["username"])
+	}
+	if firstUser["email"] != "alice@example.com" {
+		t.Errorf("Expected email='alice@example.com', got %v", firstUser["email"])
+	}
+	if firstUser["role"] != "admin" {
+		t.Errorf("Expected role='admin', got %v", firstUser["role"])
+	}
+
+	// Verify second user
+	secondUser := results[1]
+	if secondUser["user_id"] != float64(2) {
+		t.Errorf("Expected user_id=2, got %v", secondUser["user_id"])
+	}
+	if secondUser["username"] != "bob" {
+		t.Errorf("Expected username='bob', got %v", secondUser["username"])
+	}
+	if secondUser["email"] != "bob@example.com" {
+		t.Errorf("Expected email='bob@example.com', got %v", secondUser["email"])
+	}
+	if secondUser["role"] != "user" {
+		t.Errorf("Expected role='user', got %v", secondUser["role"])
+	}
+
+	// Verify third user
+	thirdUser := results[2]
+	if thirdUser["user_id"] != float64(3) {
+		t.Errorf("Expected user_id=3, got %v", thirdUser["user_id"])
+	}
+	if thirdUser["username"] != "charlie" {
+		t.Errorf("Expected username='charlie', got %v", thirdUser["username"])
+	}
+	if thirdUser["email"] != "charlie@example.com" {
+		t.Errorf("Expected email='charlie@example.com', got %v", thirdUser["email"])
+	}
+	if thirdUser["role"] != "user" {
+		t.Errorf("Expected role='user', got %v", thirdUser["role"])
+	}
+
+	t.Logf("Successfully extracted %d users from nested root path 'data.users'", len(results))
+}
+
+// TEST 11: Edge cases for root path handling
+func TestConnector_RootPath_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		rootPath      string
+		response      map[string]interface{}
+		expectedItems int
+		shouldError   bool
+		errorContains string
+	}{
+		{
+			name:     "Valid deeply nested path",
+			rootPath: "response.data.items.list",
+			response: map[string]interface{}{
+				"response": map[string]interface{}{
+					"data": map[string]interface{}{
+						"items": map[string]interface{}{
+							"list": []interface{}{
+								map[string]interface{}{"id": 1, "name": "Item 1"},
+								map[string]interface{}{"id": 2, "name": "Item 2"},
+							},
+						},
+					},
+				},
+			},
+			expectedItems: 2,
+			shouldError:   false,
+		},
+		{
+			name:     "Missing root path",
+			rootPath: "data.nonexistent",
+			response: map[string]interface{}{
+				"data": map[string]interface{}{
+					"items": []interface{}{
+						map[string]interface{}{"id": 1, "name": "Item 1"},
+					},
+				},
+			},
+			expectedItems: 0,
+			shouldError:   true,
+			errorContains: "root path 'data.nonexistent' not found",
+		},
+		{
+			name:     "Root path points to non-array",
+			rootPath: "data.metadata",
+			response: map[string]interface{}{
+				"data": map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"total": 5,
+						"page":  1,
+					},
+				},
+			},
+			expectedItems: 0,
+			shouldError:   true,
+			errorContains: "root path 'data.metadata' is not an array",
+		},
+		{
+			name:     "Empty array at root path",
+			rootPath: "data.users",
+			response: map[string]interface{}{
+				"data": map[string]interface{}{
+					"users": []interface{}{}, // Empty array
+				},
+			},
+			expectedItems: 0,
+			shouldError:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(tt.response)
+			}))
+			defer mockServer.Close()
+
+			cfg := &config.Pipeline{
+				Name: "root-path-edge-case-test",
+				Source: config.Source{
+					Type:     config.SourceTypeREST,
+					Endpoint: mockServer.URL,
+					ResponseMapping: config.ResponseMapping{
+						RootPath: tt.rootPath,
+						Fields: []config.Field{
+							{Name: "id", Path: "id"},
+							{Name: "name", Path: "name"},
+						},
+					},
+				},
+			}
+
+			connector, err := api.NewConnector(cfg)
+			if err != nil {
+				t.Fatalf("Failed to create connector: %v", err)
+			}
+
+			results, err := connector.Extract(context.Background())
+
+			if tt.shouldError {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+					return
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Expected error containing '%s', got: %s", tt.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if len(results) != tt.expectedItems {
+					t.Errorf("Expected %d items, got %d", tt.expectedItems, len(results))
+				}
+			}
+
+			t.Logf("%s: %s", tt.name, func() string {
+				if tt.shouldError {
+					return "correctly handled error case"
+				}
+				return fmt.Sprintf("extracted %d items", len(results))
+			}())
+		})
+	}
+}
