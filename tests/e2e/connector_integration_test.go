@@ -1450,3 +1450,219 @@ func TestConnector_DefaultValueEdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TEST 16: Mixed types in items array handling
+func TestConnector_MixedTypesInItems(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Array containing mixed types: number, string, object
+		response := map[string]interface{}{
+			"items": []interface{}{
+				1,     // Non-object: number
+				"foo", // Non-object: string
+				map[string]interface{}{"id": 3, "name": "Alice"}, // Valid object
+				nil,                              // Non-object: null
+				[]interface{}{"nested", "array"}, // Non-object: array
+				map[string]interface{}{"id": 4, "name": "Bob"}, // Valid object
+				true,                            // Non-object: boolean
+				map[string]interface{}{"id": 5}, // Valid object (partial)
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Pipeline{
+		Name: "mixed-types-test",
+		Source: config.Source{
+			Type:     config.SourceTypeREST,
+			Endpoint: mockServer.URL,
+			ResponseMapping: config.ResponseMapping{
+				Fields: []config.Field{
+					{Name: "id", Path: "id"},
+					{Name: "name", Path: "name", DefaultValue: "unknown"},
+				},
+			},
+		},
+	}
+
+	connector, err := api.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create connector: %v", err)
+	}
+
+	ctx := context.Background()
+	results, err := connector.Extract(ctx)
+
+	// Check what your connector actually does with mixed types
+	if err != nil {
+		// Option 1: Your connector returns an error (strict validation)
+		t.Logf("Connector returned error for mixed types: %v", err)
+
+		// Verify it's the right kind of error
+		if !strings.Contains(err.Error(), "not a map") || !strings.Contains(err.Error(), "invalid item data type") {
+			t.Errorf("Expected error about item not being a map, got: %s", err.Error())
+		}
+
+		t.Logf("Connector properly validates item types and returns descriptive error")
+		return
+	}
+
+	// Option 2: Your connector skips invalid entries and processes valid ones
+	t.Logf("Connector processed mixed types without error, got %d results", len(results))
+
+	// If no error, we expect only the valid objects to be processed
+	// Valid objects in the array: indices 2, 5, 7 (3 total)
+	expectedValidItems := 3
+	if len(results) != expectedValidItems {
+		t.Errorf("Expected %d valid items (objects only), got %d", expectedValidItems, len(results))
+	}
+
+	// Verify the valid items were processed correctly
+	if len(results) >= 1 {
+		first := results[0]
+		if first["id"] != float64(3) || first["name"] != "Alice" {
+			t.Errorf("First valid item incorrect: %+v", first)
+		}
+	}
+
+	if len(results) >= 2 {
+		second := results[1]
+		if second["id"] != float64(4) || second["name"] != "Bob" {
+			t.Errorf("Second valid item incorrect: %+v", second)
+		}
+	}
+
+	if len(results) >= 3 {
+		third := results[2]
+		if third["id"] != float64(5) || third["name"] != "unknown" {
+			t.Errorf("Third valid item incorrect: %+v", third)
+		}
+	}
+
+	t.Logf("Connector gracefully skipped invalid entries and processed valid objects")
+}
+
+// TEST 17: Mixed types edge cases and error handling
+func TestConnector_MixedTypesEdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		items       []interface{}
+		expectError bool
+		description string
+	}{
+		{
+			name: "All non-objects",
+			items: []interface{}{
+				1, "string", true, nil, []interface{}{"array"},
+			},
+			expectError: true, // or false if your connector skips all and returns empty
+			description: "Array with no valid objects",
+		},
+		{
+			name: "Mixed with empty object",
+			items: []interface{}{
+				map[string]interface{}{}, // Empty object
+				"invalid",                // This will cause the connector to fail
+				map[string]interface{}{"id": 1},
+			},
+			expectError: true, // FIXED: Your connector fails fast on invalid items
+			description: "Mix including empty object - fails on first invalid item",
+		},
+		{
+			name: "Nested objects as invalid items",
+			items: []interface{}{
+				map[string]interface{}{
+					"nested": map[string]interface{}{"deep": "value"},
+				}, // Valid object with nested content
+				map[string]interface{}{
+					"data": []interface{}{1, 2, 3},
+				}, // Valid object with array content
+				42, // Invalid - will cause failure
+			},
+			expectError: true, // FIXED: Your connector fails fast on invalid items
+			description: "Complex valid objects mixed with invalid - fails on invalid item",
+		},
+		{
+			name: "All valid objects with complex nesting",
+			items: []interface{}{
+				map[string]interface{}{
+					"valid": "object",
+					"nested": map[string]interface{}{
+						"also": "valid",
+					},
+				},
+				map[string]interface{}{
+					"array_in_object": []interface{}{
+						"this", "is", "still", "valid",
+					},
+				},
+			},
+			expectError: false, // No invalid items, should work fine
+			description: "All valid objects with complex nesting",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				response := map[string]interface{}{
+					"items": tt.items,
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(response)
+			}))
+			defer mockServer.Close()
+
+			cfg := &config.Pipeline{
+				Name: "mixed-types-edge-case-test",
+				Source: config.Source{
+					Type:     config.SourceTypeREST,
+					Endpoint: mockServer.URL,
+					ResponseMapping: config.ResponseMapping{
+						Fields: []config.Field{
+							{Name: "id", Path: "id", DefaultValue: -1},
+							{Name: "name", Path: "valid", DefaultValue: "default"},
+						},
+					},
+				},
+			}
+
+			connector, err := api.NewConnector(cfg)
+			if err != nil {
+				t.Fatalf("Failed to create connector: %v", err)
+			}
+
+			results, err := connector.Extract(context.Background())
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for %s, got nil", tt.description)
+				} else {
+					t.Logf("Got expected error: %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for %s: %v", tt.description, err)
+				} else {
+					// Count valid objects in the test data
+					validObjects := 0
+					for _, item := range tt.items {
+						if _, ok := item.(map[string]interface{}); ok {
+							validObjects++
+						}
+					}
+
+					if len(results) != validObjects {
+						t.Errorf("Expected %d results (valid objects), got %d", validObjects, len(results))
+					}
+
+					t.Logf("Processed %d valid objects successfully", len(results))
+				}
+			}
+
+			t.Logf("%s: %s", tt.name, tt.description)
+		})
+	}
+}
