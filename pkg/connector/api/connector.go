@@ -188,7 +188,7 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 		opts["pageParam"] = p.PageParam
 		opts["sizeParam"] = p.SizeParam
 		opts["hasMorePath"] = p.HasMorePath
-		opts["totalPagesPath"] = p.TotalPagesPath // NEW: Add this line
+		opts["totalPagesPath"] = p.TotalPagesPath
 		opts["startPage"] = 1
 		opts["pageSize"] = p.PageSize
 
@@ -196,6 +196,7 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 		opts["offsetParam"] = p.OffsetParam
 		opts["sizeParam"] = p.LimitParam
 		opts["hasMorePath"] = p.HasMorePath
+		opts["totalCountPath"] = p.TotalCountPath
 		opts["initOffset"] = 0
 		opts["pageSize"] = p.OffsetIncrement
 
