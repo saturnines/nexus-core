@@ -396,3 +396,129 @@ func TestConnector_OffsetPagination_ServerError(t *testing.T) {
 
 	t.Logf("Correctly handled server error on second offset request: %v", err)
 }
+
+// TestConnector_OffsetPagination_TotalCount tests offset pagination using total_count
+func TestConnector_OffsetPagination_TotalCount(t *testing.T) {
+	var requestLog []string
+	totalItems := 25
+	pageSize := 10
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		offset := r.URL.Query().Get("offset")
+		limit := r.URL.Query().Get("limit")
+		requestLog = append(requestLog, fmt.Sprintf("offset=%s&limit=%s", offset, limit))
+
+		offsetNum, err := strconv.Atoi(offset)
+		if err != nil || offsetNum < 0 {
+			offsetNum = 0
+		}
+
+		limitNum, err := strconv.Atoi(limit)
+		if err != nil || limitNum < 1 {
+			limitNum = pageSize
+		}
+
+		// Calculate items for this offset
+		endIdx := offsetNum + limitNum
+		if endIdx > totalItems {
+			endIdx = totalItems
+		}
+
+		var items []interface{}
+		for i := offsetNum; i < endIdx; i++ {
+			items = append(items, map[string]interface{}{
+				"id":     i + 1,
+				"name":   fmt.Sprintf("Record %d", i+1),
+				"offset": offsetNum,
+			})
+		}
+
+		response := map[string]interface{}{
+			"data": items,
+			"meta": map[string]interface{}{
+				"total_count": totalItems, // Use total_count field
+				"offset":      offsetNum,
+				"limit":       limitNum,
+				"returned":    len(items),
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		t.Logf("Served offset %d: %d items (IDs %d-%d), total_count=%d", offsetNum, len(items), offsetNum+1, endIdx, totalItems)
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Pipeline{
+		Name: "offset-total-count-test",
+		Source: config.Source{
+			Type:     config.SourceTypeREST,
+			Endpoint: mockServer.URL,
+			ResponseMapping: config.ResponseMapping{
+				RootPath: "data",
+				Fields: []config.Field{
+					{Name: "id", Path: "id"},
+					{Name: "name", Path: "name"},
+					{Name: "offset", Path: "offset"},
+				},
+			},
+		},
+		Pagination: &config.Pagination{
+			Type:            config.PaginationTypeOffset,
+			OffsetParam:     "offset",
+			LimitParam:      "limit",
+			OffsetIncrement: pageSize,
+			TotalCountPath:  "meta.total_count", // Use total_count instead of has_more
+		},
+	}
+
+	connector, err := api.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create connector: %v", err)
+	}
+
+	ctx := context.Background()
+	results, err := connector.Extract(ctx)
+	if err != nil {
+		t.Fatalf("Extract failed: %v", err)
+	}
+
+	// Verify total results
+	if len(results) != totalItems {
+		t.Errorf("Expected %d total results, got %d", totalItems, len(results))
+	}
+
+	// Should make exactly 3 requests: 0-9, 10-19, 20-24
+	expectedRequests := []string{
+		"offset=0&limit=10",
+		"offset=10&limit=10",
+		"offset=20&limit=10",
+	}
+
+	if len(requestLog) != len(expectedRequests) {
+		t.Errorf("Expected %d requests, got %d: %v", len(expectedRequests), len(requestLog), requestLog)
+	}
+
+	for i, expected := range expectedRequests {
+		if i < len(requestLog) && requestLog[i] != expected {
+			t.Errorf("Request %d: expected %s, got %s", i+1, expected, requestLog[i])
+		}
+	}
+
+	// Verify data integrity
+	if len(results) > 0 {
+		first := results[0]
+		if first["id"] != float64(1) || first["name"] != "Record 1" {
+			t.Errorf("First item incorrect: %+v", first)
+		}
+	}
+
+	if len(results) == totalItems {
+		last := results[totalItems-1]
+		if last["id"] != float64(totalItems) || last["name"] != fmt.Sprintf("Record %d", totalItems) {
+			t.Errorf("Last item incorrect: %+v", last)
+		}
+	}
+
+	t.Logf("Successfully offset paginated using total_count: %d requests, collected %d items", len(requestLog), len(results))
+}
