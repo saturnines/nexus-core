@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -1123,6 +1124,325 @@ func TestConnector_SingleObjectFallback_EdgeCases(t *testing.T) {
 					if len(result) == 0 {
 						t.Errorf("Result should have at least some fields")
 					}
+				}
+			}
+
+			t.Logf("%s: %s", tt.name, tt.description)
+		})
+	}
+}
+
+// TEST 14: Default value usage for missing fields
+func TestConnector_DefaultValueUsage(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Response missing several fields that have defaults configured
+		response := map[string]interface{}{
+			"items": []interface{}{
+				map[string]interface{}{
+					"id":   1,
+					"name": "Alice",
+					// Missing: email, status, role, age, active, metadata
+				},
+				map[string]interface{}{
+					"id":    2,
+					"name":  "Bob",
+					"email": "bob@example.com", // This one HAS email
+					// Missing: status, role, age, active, metadata
+				},
+				map[string]interface{}{
+					"id":     3,
+					"name":   "Charlie",
+					"status": "premium", // This one HAS status
+					"role":   "admin",   // This one HAS role
+					// Missing: email, age, active, metadata
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Pipeline{
+		Name: "default-value-test",
+		Source: config.Source{
+			Type:     config.SourceTypeREST,
+			Endpoint: mockServer.URL,
+			ResponseMapping: config.ResponseMapping{
+				Fields: []config.Field{
+					{Name: "id", Path: "id"},
+					{Name: "name", Path: "name"},
+					// Fields with JSON-compatible default values
+					{Name: "email", Path: "email", DefaultValue: "no-email@example.com"},
+					{Name: "status", Path: "status", DefaultValue: "basic"},
+					{Name: "role", Path: "role", DefaultValue: "user"},
+					{Name: "age", Path: "age", DefaultValue: float64(25)}, // JSON-compatible
+					{Name: "active", Path: "active", DefaultValue: true},
+					{Name: "tags", Path: "tags", DefaultValue: []interface{}{"new", "unverified"}}, // JSON-compatible
+					{Name: "metadata", Path: "metadata", DefaultValue: map[string]interface{}{
+						"created_at": "2023-01-01T00:00:00Z",
+						"source":     "api",
+					}},
+				},
+			},
+		},
+	}
+
+	connector, err := api.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create connector: %v", err)
+	}
+
+	results, err := connector.Extract(context.Background())
+	if err != nil {
+		t.Fatalf("Extract failed: %v", err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("Expected 3 results, got %d", len(results))
+	}
+
+	// Test first user (Alice) - all fields should use defaults except id and name
+	alice := results[0]
+	if alice["id"] != float64(1) {
+		t.Errorf("Alice: Expected id=1, got %v", alice["id"])
+	}
+	if alice["name"] != "Alice" {
+		t.Errorf("Alice: Expected name='Alice', got %v", alice["name"])
+	}
+	if alice["email"] != "no-email@example.com" {
+		t.Errorf("Alice: Expected default email, got %v", alice["email"])
+	}
+	if alice["status"] != "basic" {
+		t.Errorf("Alice: Expected default status='basic', got %v", alice["status"])
+	}
+	if alice["role"] != "user" {
+		t.Errorf("Alice: Expected default role='user', got %v", alice["role"])
+	}
+	if alice["age"] != float64(25) { // Fixed: expect float64
+		t.Errorf("Alice: Expected default age=25, got %v", alice["age"])
+	}
+	if alice["active"] != true {
+		t.Errorf("Alice: Expected default active=true, got %v", alice["active"])
+	}
+
+	// Verify complex default values (array and map)
+	if tags, ok := alice["tags"].([]interface{}); ok { // expect []interface{}
+		expectedTags := []interface{}{"new", "unverified"}
+		if len(tags) != len(expectedTags) {
+			t.Errorf("Alice: Expected tags length %d, got %d", len(expectedTags), len(tags))
+		} else {
+			for i, tag := range expectedTags {
+				if tags[i] != tag {
+					t.Errorf("Alice: Expected tag[%d]='%v', got '%v'", i, tag, tags[i]) // added %v
+				}
+			}
+		}
+	} else {
+		t.Errorf("Alice: Expected tags to be []interface{}, got %T: %v", alice["tags"], alice["tags"]) // []interface{}
+	}
+
+	if metadata, ok := alice["metadata"].(map[string]interface{}); ok {
+		if metadata["created_at"] != "2023-01-01T00:00:00Z" {
+			t.Errorf("Alice: Expected metadata.created_at='2023-01-01T00:00:00Z', got %v", metadata["created_at"])
+		}
+		if metadata["source"] != "api" {
+			t.Errorf("Alice: Expected metadata.source='api', got %v", metadata["source"])
+		}
+	} else {
+		t.Errorf("Alice: Expected metadata to be map[string]interface{}, got %T: %v", alice["metadata"], alice["metadata"])
+	}
+
+	// Test second user (Bob) has email, should use defaults for others
+	bob := results[1]
+	if bob["id"] != float64(2) {
+		t.Errorf("Bob: Expected id=2, got %v", bob["id"])
+	}
+	if bob["email"] != "bob@example.com" {
+		t.Errorf("Bob: Expected email='bob@example.com', got %v", bob["email"])
+	}
+	if bob["status"] != "basic" {
+		t.Errorf("Bob: Expected default status='basic', got %v", bob["status"])
+	}
+	if bob["role"] != "user" {
+		t.Errorf("Bob: Expected default role='user', got %v", bob["role"])
+	}
+
+	// Test third user (Charlie) has status and role, should use defaults for others
+	charlie := results[2]
+	if charlie["id"] != float64(3) {
+		t.Errorf("Charlie: Expected id=3, got %v", charlie["id"])
+	}
+	if charlie["email"] != "no-email@example.com" {
+		t.Errorf("Charlie: Expected default email, got %v", charlie["email"])
+	}
+	if charlie["status"] != "premium" {
+		t.Errorf("Charlie: Expected status='premium' (from API), got %v", charlie["status"])
+	}
+	if charlie["role"] != "admin" {
+		t.Errorf("Charlie: Expected role='admin' (from API), got %v", charlie["role"])
+	}
+	if charlie["age"] != float64(25) { // expect float64
+		t.Errorf("Charlie: Expected default age=25, got %v", charlie["age"])
+	}
+
+	t.Logf("Successfully verified default values for %d users", len(results))
+}
+
+// TEST 15: Default value edge cases and types
+func TestConnector_DefaultValueEdgeCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		response      map[string]interface{}
+		fieldConfig   []config.Field
+		expectedValue interface{}
+		fieldName     string
+		description   string
+	}{
+		{
+			name: "Null value uses default",
+			response: map[string]interface{}{
+				"items": []interface{}{
+					map[string]interface{}{
+						"id":     1,
+						"status": nil, // Explicit null
+					},
+				},
+			},
+			fieldConfig: []config.Field{
+				{Name: "id", Path: "id"},
+				{Name: "status", Path: "status", DefaultValue: "active"},
+			},
+			expectedValue: "active",
+			fieldName:     "status",
+			description:   "Null values should trigger default usage",
+		},
+		{
+			name: "Zero values are preserved",
+			response: map[string]interface{}{
+				"items": []interface{}{
+					map[string]interface{}{
+						"id":     1,
+						"count":  0,     // Zero value should be preserved
+						"name":   "",    // Empty string should be preserved
+						"active": false, // False should be preserved
+					},
+				},
+			},
+			fieldConfig: []config.Field{
+				{Name: "id", Path: "id"},
+				{Name: "count", Path: "count", DefaultValue: 100},
+				{Name: "name", Path: "name", DefaultValue: "default-name"},
+				{Name: "active", Path: "active", DefaultValue: true},
+			},
+			expectedValue: map[string]interface{}{
+				"count":  float64(0), // JSON numbers are float64
+				"name":   "",
+				"active": false,
+			},
+			fieldName:   "multiple",
+			description: "Zero values should NOT trigger defaults",
+		},
+		{
+			name: "Nested path missing uses default",
+			response: map[string]interface{}{
+				"items": []interface{}{
+					map[string]interface{}{
+						"id": 1,
+						"user": map[string]interface{}{
+							"name": "Alice",
+							// Missing user.profile.email
+						},
+					},
+				},
+			},
+			fieldConfig: []config.Field{
+				{Name: "id", Path: "id"},
+				{Name: "email", Path: "user.profile.email", DefaultValue: "missing@example.com"},
+			},
+			expectedValue: "missing@example.com",
+			fieldName:     "email",
+			description:   "Missing nested paths should use defaults",
+		},
+		{
+			name: "Complex default types",
+			response: map[string]interface{}{
+				"items": []interface{}{
+					map[string]interface{}{
+						"id": 1,
+						// Missing complex fields
+					},
+				},
+			},
+			fieldConfig: []config.Field{
+				{Name: "id", Path: "id"},
+				{Name: "config", Path: "config", DefaultValue: map[string]interface{}{
+					"timeout":   float64(30),
+					"retries":   float64(3),
+					"enabled":   true,
+					"endpoints": []interface{}{"api.example.com", "backup.example.com"},
+				}},
+			},
+			expectedValue: map[string]interface{}{
+				"timeout":   float64(30),
+				"retries":   float64(3),
+				"enabled":   true,
+				"endpoints": []interface{}{"api.example.com", "backup.example.com"},
+			},
+			fieldName:   "config",
+			description: "Complex nested default values should work",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(tt.response)
+			}))
+			defer mockServer.Close()
+
+			cfg := &config.Pipeline{
+				Name: "default-edge-case-test",
+				Source: config.Source{
+					Type:     config.SourceTypeREST,
+					Endpoint: mockServer.URL,
+					ResponseMapping: config.ResponseMapping{
+						Fields: tt.fieldConfig,
+					},
+				},
+			}
+
+			connector, err := api.NewConnector(cfg)
+			if err != nil {
+				t.Fatalf("Failed to create connector: %v", err)
+			}
+
+			results, err := connector.Extract(context.Background())
+			if err != nil {
+				t.Fatalf("Extract failed: %v", err)
+			}
+
+			if len(results) != 1 {
+				t.Fatalf("Expected 1 result, got %d", len(results))
+			}
+
+			result := results[0]
+
+			if tt.fieldName == "multiple" {
+				// Special case for testing multiple fields (count, name, active)
+				expected := tt.expectedValue.(map[string]interface{})
+				for field, expectedVal := range expected {
+					if result[field] != expectedVal {
+						t.Errorf("Field %s: expected %v, got %v", field, expectedVal, result[field])
+					}
+				}
+			} else {
+				// Use DeepEqual for single-field or complex default comparisons
+				got := result[tt.fieldName]
+				if !reflect.DeepEqual(got, tt.expectedValue) {
+					t.Errorf("Field %q: expected %+v, got %+v", tt.fieldName, tt.expectedValue, got)
 				}
 			}
 
