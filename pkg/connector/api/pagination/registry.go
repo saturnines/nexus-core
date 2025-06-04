@@ -39,10 +39,13 @@ func pageCreator(c HTTPDoer, r *http.Request, opts map[string]interface{}) (Page
 	if err != nil {
 		return nil, err
 	}
-	hm, err := getStringOption(opts, "hasMorePath", "page pagination")
-	if err != nil {
-		return nil, err
-	}
+
+	// Make hasMorePath optional since we might use totalPagesPath instead
+	hm := getOptionalStringOption(opts, "hasMorePath")
+
+	// Add support for totalPagesPath (optional)
+	tp := getOptionalStringOption(opts, "totalPagesPath")
+
 	sp, err := getIntOption(opts, "startPage", "page pagination")
 	if err != nil {
 		return nil, err
@@ -51,6 +54,13 @@ func pageCreator(c HTTPDoer, r *http.Request, opts map[string]interface{}) (Page
 	if err != nil {
 		return nil, err
 	}
+
+	// Use the new constructor if totalPagesPath is provided
+	if tp != "" {
+		return NewPagePagerWithTotalPages(c, r, pp, sz, hm, tp, sp, ps), nil
+	}
+
+	// Fall back to original constructor for backward compatibility
 	return NewPagePager(c, r, pp, sz, hm, sp, ps), nil
 }
 
