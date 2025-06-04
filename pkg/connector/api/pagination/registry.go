@@ -64,6 +64,7 @@ func pageCreator(c HTTPDoer, r *http.Request, opts map[string]interface{}) (Page
 	return NewPagePager(c, r, pp, sz, hm, sp, ps), nil
 }
 
+// Update this function in pkg/connector/api/pagination/registry.go
 func offsetCreator(c HTTPDoer, r *http.Request, opts map[string]interface{}) (Pager, error) {
 	op, err := getStringOption(opts, "offsetParam", "offset pagination")
 	if err != nil {
@@ -73,10 +74,13 @@ func offsetCreator(c HTTPDoer, r *http.Request, opts map[string]interface{}) (Pa
 	if err != nil {
 		return nil, err
 	}
-	hm, err := getStringOption(opts, "hasMorePath", "offset pagination")
-	if err != nil {
-		return nil, err
-	}
+
+	// Make hasMorePath optional since we might use totalCountPath instead
+	hm := getOptionalStringOption(opts, "hasMorePath")
+
+	// NEW: Add support for totalCountPath (optional)
+	tc := getOptionalStringOption(opts, "totalCountPath")
+
 	io, err := getIntOption(opts, "initOffset", "offset pagination")
 	if err != nil {
 		return nil, err
@@ -85,6 +89,13 @@ func offsetCreator(c HTTPDoer, r *http.Request, opts map[string]interface{}) (Pa
 	if err != nil {
 		return nil, err
 	}
+
+	// Use the new constructor if totalCountPath is provided (I should refactor this in the future once I'm done with e2e testing..
+	if tc != "" {
+		return NewOffsetPagerWithTotalCount(c, r, op, sz, hm, tc, io, ps), nil
+	}
+
+	// Fall back to original constructor for backward compatibility
 	return NewOffsetPager(c, r, op, sz, hm, io, ps), nil
 }
 
