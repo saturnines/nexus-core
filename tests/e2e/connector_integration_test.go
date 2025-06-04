@@ -3,8 +3,10 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -401,4 +403,266 @@ func TestConnector_PagePagination(t *testing.T) {
 	}
 
 	t.Logf("Final results: %+v", results)
+}
+
+// Helper to generate a paginated response with a fixed total_pages and optional last‐page count.
+func makePageHandler(t *testing.T, totalPages, pageSize, itemsLastPage int, log *[]string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		pageParam := r.URL.Query().Get("page")
+		sizeParam := r.URL.Query().Get("page_size")
+		*log = append(*log, fmt.Sprintf("page=%s&page_size=%s", pageParam, sizeParam))
+
+		pageNum := 1
+		if pageParam != "" {
+			if p, err := strconv.Atoi(pageParam); err == nil && p > 0 {
+				pageNum = p
+			}
+		}
+
+		if pageNum > totalPages {
+			t.Errorf("Received unexpected request for page %d (total_pages=%d)", pageNum, totalPages)
+			// Return empty payload so connector can finish gracefully
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"items": []interface{}{},
+				"meta": map[string]interface{}{
+					"current_page": pageNum,
+					"total_pages":  totalPages,
+					"per_page":     pageSize,
+				},
+			})
+			return
+		}
+
+		// Determine how many items to return on this page
+		currentCount := pageSize
+		if pageNum == totalPages {
+			currentCount = itemsLastPage
+		}
+		startID := (pageNum-1)*pageSize + 1
+
+		items := make([]interface{}, 0, currentCount)
+		for i := 0; i < currentCount; i++ {
+			items = append(items, map[string]interface{}{
+				"id":   startID + i,
+				"name": fmt.Sprintf("User %d", startID+i),
+				"page": pageNum,
+			})
+		}
+
+		response := map[string]interface{}{
+			"items": items,
+			"meta": map[string]interface{}{
+				"current_page": pageNum,
+				"total_pages":  totalPages,
+				"per_page":     pageSize,
+				"total_count":  (totalPages-1)*pageSize + itemsLastPage,
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Fatalf("Failed to encode JSON: %v", err)
+		}
+	}
+}
+
+// TEST 8: Page-based pagination driven by meta.total_pages
+func TestConnector_PagePagination_TotalPages(t *testing.T) {
+	var requestLog []string
+	totalPages := 4
+	itemsPerPage := 3
+	// Last page has exactly itemsPerPage items (a “full” final page)
+	itemsLastPage := itemsPerPage
+
+	mockServer := httptest.NewServer(makePageHandler(t, totalPages, itemsPerPage, itemsLastPage, &requestLog))
+	defer mockServer.Close()
+
+	cfg := &config.Pipeline{
+		Name: "page-total-pages-test",
+		Source: config.Source{
+			Type:     config.SourceTypeREST,
+			Endpoint: mockServer.URL,
+			ResponseMapping: config.ResponseMapping{
+				Fields: []config.Field{
+					{Name: "id", Path: "id"},
+					{Name: "name", Path: "name"},
+					{Name: "page", Path: "page"},
+				},
+			},
+		},
+		Pagination: &config.Pagination{
+			Type:           config.PaginationTypePage,
+			PageParam:      "page",
+			SizeParam:      "page_size",
+			PageSize:       itemsPerPage,
+			TotalPagesPath: "meta.total_pages",
+		},
+	}
+
+	connector, err := api.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create connector: %v", err)
+	}
+
+	ctx := context.Background()
+	results, err := connector.Extract(ctx)
+	if err != nil {
+		t.Fatalf("Extract failed: %v", err)
+	}
+
+	// Expect 4 pages × 3 items each = 12
+	expectedItems := totalPages * itemsPerPage
+	if got := len(results); got != expectedItems {
+		t.Errorf("Expected %d total items, got %d", expectedItems, got)
+	}
+
+	// Verify all four pages were requested
+	expectedRequests := []string{
+		"page=1&page_size=3",
+		"page=2&page_size=3",
+		"page=3&page_size=3",
+		"page=4&page_size=3",
+	}
+	if len(requestLog) != len(expectedRequests) {
+		t.Errorf("Expected %d requests, got %d: %v", len(expectedRequests), len(requestLog), requestLog)
+	}
+	for i, exp := range expectedRequests {
+		if i < len(requestLog) && requestLog[i] != exp {
+			t.Errorf("Request %d: expected %s, got %s", i+1, exp, requestLog[i])
+		}
+	}
+
+	// Spot‐check some items for correctness
+	if len(results) > 0 {
+		first := results[0]
+		if first["id"] != float64(1) || first["name"] != "User 1" || first["page"] != float64(1) {
+			t.Errorf("First item incorrect: %+v", first)
+		}
+	}
+	if len(results) >= 7 {
+		seventh := results[6] // start of page 3
+		if seventh["id"] != float64(7) || seventh["name"] != "User 7" || seventh["page"] != float64(3) {
+			t.Errorf("Seventh item (page 3 start) incorrect: %+v", seventh)
+		}
+	}
+	if len(results) == expectedItems {
+		last := results[expectedItems-1]
+		if last["id"] != float64(expectedItems) || last["name"] != fmt.Sprintf("User %d", expectedItems) {
+			t.Errorf("Last item incorrect: %+v", last)
+		}
+	}
+
+	t.Logf("Paginated through %d pages, collected %d items", totalPages, len(results))
+}
+
+// TEST 9: Page pagination with meta.total_pages edge cases
+func TestConnector_PagePagination_TotalPages_EdgeCases(t *testing.T) {
+	type tc struct {
+		name             string
+		totalPages       int
+		itemsLastPage    int
+		expectedItems    int
+		expectedRequests int
+		description      string
+	}
+	tests := []tc{
+		{
+			name:             "Single page",
+			totalPages:       1,
+			itemsLastPage:    5,
+			expectedItems:    5,
+			expectedRequests: 1,
+			description:      "Dataset fits in one page",
+		},
+		{
+			name:             "Empty last page",
+			totalPages:       3,
+			itemsLastPage:    0,
+			expectedItems:    2 + 2 + 0,
+			expectedRequests: 3,
+			description:      "Last page returns empty array",
+		},
+		{
+			name:             "Partial last page",
+			totalPages:       3,
+			itemsLastPage:    1,
+			expectedItems:    2 + 2 + 1,
+			expectedRequests: 3,
+			description:      "Last page has fewer items than page size",
+		},
+		{
+			name:             "Overflow last page",
+			totalPages:       2,
+			itemsLastPage:    5,     // exceeds pageSize
+			expectedItems:    2 + 5, // connector will take whatever comes back
+			expectedRequests: 2,
+			description:      "Last page returns more items than page size",
+		},
+	}
+
+	pageSize := 2
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestLog []string
+			mockServer := httptest.NewServer(
+				makePageHandler(t, tt.totalPages, pageSize, tt.itemsLastPage, &requestLog),
+			)
+			defer mockServer.Close()
+
+			cfg := &config.Pipeline{
+				Name: "page-edge-case-test",
+				Source: config.Source{
+					Type:     config.SourceTypeREST,
+					Endpoint: mockServer.URL,
+					ResponseMapping: config.ResponseMapping{
+						Fields: []config.Field{
+							{Name: "id", Path: "id"},
+							{Name: "name", Path: "name"},
+						},
+					},
+				},
+				Pagination: &config.Pagination{
+					Type:           config.PaginationTypePage,
+					PageParam:      "page",
+					SizeParam:      "page_size",
+					PageSize:       pageSize,
+					TotalPagesPath: "meta.total_pages",
+				},
+			}
+
+			connector, err := api.NewConnector(cfg)
+			if err != nil {
+				t.Fatalf("Failed to create connector: %v", err)
+			}
+
+			results, err := connector.Extract(context.Background())
+			if err != nil {
+				t.Fatalf("Extract failed: %v", err)
+			}
+
+			if got := len(results); got != tt.expectedItems {
+				t.Errorf("Expected %d items, got %d", tt.expectedItems, got)
+			}
+			if gotReq := len(requestLog); gotReq != tt.expectedRequests {
+				t.Errorf("Expected %d requests, got %d: %v", tt.expectedRequests, gotReq, requestLog)
+			}
+
+			// Spot‐check boundaries for each page if any items exist
+			if len(results) > 0 && tt.expectedItems > 0 {
+				first := results[0]
+				if first["id"] != float64(1) || first["name"] != "User 1" {
+					t.Errorf("Page 1, first item wrong: %+v", first)
+				}
+			}
+			if tt.totalPages > 1 && len(results) >= pageSize+1 {
+				secondPageFirst := results[pageSize]
+				if secondPageFirst["id"] != float64(pageSize+1) {
+					t.Errorf("Page 2, first item ID expected %d, got %v", pageSize+1, secondPageFirst["id"])
+				}
+			}
+
+			t.Logf("%s: %d requests, %d items", tt.name, len(requestLog), len(results))
+		})
+	}
 }
