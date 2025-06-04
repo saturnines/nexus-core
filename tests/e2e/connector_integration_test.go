@@ -922,3 +922,211 @@ func TestConnector_RootPath_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TEST 12: Single-object fallback when no items/data array exists
+func TestConnector_SingleObjectFallback(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return a single object directly (no items/data wrapper)
+		response := map[string]interface{}{
+			"id":    42,
+			"name":  "Alice",
+			"email": "alice@example.com",
+			"profile": map[string]interface{}{
+				"role":       "admin",
+				"department": "engineering",
+			},
+			"metadata": map[string]interface{}{
+				"created_at": "2023-01-01T00:00:00Z",
+				"updated_at": "2023-01-01T12:00:00Z",
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Pipeline{
+		Name: "single-object-fallback-test",
+		Source: config.Source{
+			Type:     config.SourceTypeREST,
+			Endpoint: mockServer.URL,
+			ResponseMapping: config.ResponseMapping{
+				// No RootPath specified  should fallback to treating entire response as single object
+				Fields: []config.Field{
+					{Name: "user_id", Path: "id"},
+					{Name: "username", Path: "name"},
+					{Name: "email", Path: "email"},
+					{Name: "role", Path: "profile.role"},             // Nested field
+					{Name: "department", Path: "profile.department"}, // Nested field
+					{Name: "created", Path: "metadata.created_at"},   // Nested field
+				},
+			},
+		},
+	}
+
+	connector, err := api.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create connector: %v", err)
+	}
+
+	ctx := context.Background()
+	results, err := connector.Extract(ctx)
+	if err != nil {
+		t.Fatalf("Extract failed: %v", err)
+	}
+
+	// Should extract exactly one result from the single object
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(results))
+	}
+
+	result := results[0]
+
+	// Verify all fields were extracted correctly
+	if result["user_id"] != float64(42) {
+		t.Errorf("Expected user_id=42, got %v", result["user_id"])
+	}
+	if result["username"] != "Alice" {
+		t.Errorf("Expected username='Alice', got %v", result["username"])
+	}
+	if result["email"] != "alice@example.com" {
+		t.Errorf("Expected email='alice@example.com', got %v", result["email"])
+	}
+	if result["role"] != "admin" {
+		t.Errorf("Expected role='admin', got %v", result["role"])
+	}
+	if result["department"] != "engineering" {
+		t.Errorf("Expected department='engineering', got %v", result["department"])
+	}
+	if result["created"] != "2023-01-01T00:00:00Z" {
+		t.Errorf("Expected created='2023-01-01T00:00:00Z', got %v", result["created"])
+	}
+
+	t.Logf("Successfully extracted single object: %+v", result)
+}
+
+// TEST 13: Single object fallback edge cases
+func TestConnector_SingleObjectFallback_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		response      map[string]interface{}
+		rootPath      string
+		expectedItems int
+		shouldError   bool
+		description   string
+	}{
+		{
+			name:     "Empty object fallback",
+			response: map[string]interface{}{
+				// Empty object
+			},
+			rootPath:      "", // No root path
+			expectedItems: 1,  // Should still create one result with default values
+			shouldError:   false,
+			description:   "Empty object should fallback to single result",
+		},
+		{
+			name: "Object with missing fields",
+			response: map[string]interface{}{
+				"id": 1,
+				// Missing name field
+			},
+			rootPath:      "", // No root path
+			expectedItems: 1,
+			shouldError:   false,
+			description:   "Object with missing fields should use defaults",
+		},
+		{
+			name: "Nested object fallback",
+			response: map[string]interface{}{
+				"user": map[string]interface{}{
+					"id":   99,
+					"name": "Bob",
+				},
+				"metadata": map[string]interface{}{
+					"version": "1.0",
+				},
+			},
+			rootPath:      "", // No root path
+			expectedItems: 1,
+			shouldError:   false,
+			description:   "Complex nested object should work",
+		},
+		{
+			name: "Failed array lookup fallback",
+			response: map[string]interface{}{
+				"users": map[string]interface{}{ // Not an array!
+					"count":  5,
+					"active": true,
+				},
+				"id":   123,
+				"name": "Charlie",
+			},
+			rootPath:      "", // No root path, will try items/data, then fallback
+			expectedItems: 1,
+			shouldError:   false,
+			description:   "When items/data lookup fails, should fallback to whole object",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(tt.response)
+			}))
+			defer mockServer.Close()
+
+			cfg := &config.Pipeline{
+				Name: "single-object-edge-case-test",
+				Source: config.Source{
+					Type:     config.SourceTypeREST,
+					Endpoint: mockServer.URL,
+					ResponseMapping: config.ResponseMapping{
+						RootPath: tt.rootPath,
+						Fields: []config.Field{
+							{Name: "id", Path: "id", DefaultValue: -1},
+							{Name: "name", Path: "name", DefaultValue: "unknown"},
+							{Name: "version", Path: "metadata.version", DefaultValue: "none"},
+						},
+					},
+				},
+			}
+
+			connector, err := api.NewConnector(cfg)
+			if err != nil {
+				t.Fatalf("Failed to create connector: %v", err)
+			}
+
+			results, err := connector.Extract(context.Background())
+
+			if tt.shouldError {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if len(results) != tt.expectedItems {
+					t.Errorf("Expected %d items, got %d", tt.expectedItems, len(results))
+				}
+
+				// Verify we got some result for non error cases
+				if len(results) > 0 {
+					result := results[0]
+					t.Logf("Result: %+v", result)
+
+					// Basic sanity check should have some fields
+					if len(result) == 0 {
+						t.Errorf("Result should have at least some fields")
+					}
+				}
+			}
+
+			t.Logf("%s: %s", tt.name, tt.description)
+		})
+	}
+}
