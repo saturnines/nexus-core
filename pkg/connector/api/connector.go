@@ -64,13 +64,32 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 		if err != nil {
 			return nil, errors2.WrapError(err, errors2.ErrConfiguration, "failed to configure authentication")
 		}
-		c.authHandler = h
-	}
 
+		// If it's OAuth2, wrap the HTTP client with OAuth2RoundTripper
+		if cfg.Source.Auth.Type == config.AuthTypeOAuth2 {
+			if oauth2Auth, ok := h.(*auth.OAuth2Auth); ok {
+				// Wrap the existing HTTP client's transport
+				if httpClient, ok := c.httpClient.(*http.Client); ok {
+					httpClient.Transport = auth.NewOAuth2RoundTripper(httpClient.Transport, oauth2Auth)
+					// Don't set authHandler since RoundTripper handles OAuth2 automatically
+					c.authHandler = nil
+				}
+			} else {
+				return nil, errors2.WrapError(
+					fmt.Errorf("failed to cast OAuth2 handler"),
+					errors2.ErrConfiguration,
+					"OAuth2 handler configuration error",
+				)
+			}
+		} else {
+			// For non-OAuth2 auth, use the regular authHandler
+			c.authHandler = h
+		}
+	}
 	return c, nil
 }
 
-// This isn't used.
+// WithConnectorHTTPOptions This isn't used.
 // WithConnectorHTTPOptions applies custom HTTP client options.
 func WithConnectorHTTPOptions(options ...HTTPClientOption) ConnectorOption {
 	return func(c *Connector) {
