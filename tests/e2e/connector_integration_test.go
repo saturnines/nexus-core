@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	errors2 "Nexus/pkg/errors"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1663,6 +1664,101 @@ func TestConnector_MixedTypesEdgeCases(t *testing.T) {
 			}
 
 			t.Logf("%s: %s", tt.name, tt.description)
+		})
+	}
+}
+
+// TEST 18: Test Malformed JSON Unclosed Object and Syntax Errors
+func TestConnector_MalformedJSON_UnclosedAndSyntaxErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		responseBody string
+		description  string
+	}{
+		{
+			name:         "Unclosed object",
+			responseBody: `{"id": 1,`,
+			description:  "JSON object missing closing brace",
+		},
+		{
+			name:         "Unclosed array",
+			responseBody: `{"items": [{"id": 1}`,
+			description:  "JSON array missing closing bracket",
+		},
+		{
+			name:         "Unclosed string",
+			responseBody: `{"id": 1, "name": "unclosed`,
+			description:  "JSON string missing closing quote",
+		},
+		{
+			name:         "Invalid escape sequence",
+			responseBody: `{"id": 1, "name": "invalid\escape"}`,
+			description:  "Invalid escape sequence in JSON string",
+		},
+		{
+			name:         "Trailing comma",
+			responseBody: `{"id": 1, "name": "test",}`,
+			description:  "Trailing comma in JSON object",
+		},
+		{
+			name:         "Missing comma",
+			responseBody: `{"id": 1 "name": "test"}`,
+			description:  "Missing comma between JSON fields",
+		},
+		{
+			name:         "Invalid number format",
+			responseBody: `{"id": 1.2.3, "name": "test"}`,
+			description:  "Invalid number format in JSON",
+		},
+		{
+			name:         "Completely invalid JSON",
+			responseBody: `{this is not json at all}`,
+			description:  "Completely malformed JSON",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(tt.responseBody))
+			}))
+			defer mockServer.Close()
+
+			cfg := &config.Pipeline{
+				Name: "malformed-json-test",
+				Source: config.Source{
+					Type:     config.SourceTypeREST,
+					Endpoint: mockServer.URL,
+					ResponseMapping: config.ResponseMapping{
+						Fields: []config.Field{
+							{Name: "id", Path: "id"},
+						},
+					},
+				},
+			}
+
+			connector, err := api.NewConnector(cfg)
+			if err != nil {
+				t.Fatalf("Failed to create connector: %v", err)
+			}
+
+			_, err = connector.Extract(context.Background())
+			if err == nil {
+				t.Fatalf("Expected error for malformed JSON (%s), got nil", tt.description)
+			}
+
+			// Check if specifically reponse is an ErrHTTPResponse
+			if !errors2.Is(err, errors2.ErrHTTPResponse) {
+				t.Errorf("Expected ErrHTTPResponse, got error type: %T", err)
+			}
+
+			// Verify error message mentions JSON/decode issues
+			if !strings.Contains(err.Error(), "JSON") && !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "unmarshal") {
+				t.Errorf("Error should mention JSON/decode issue, got: %s", err.Error())
+			}
+
+			t.Logf("%s: correctly handled with error: %v", tt.description, err)
 		})
 	}
 }
