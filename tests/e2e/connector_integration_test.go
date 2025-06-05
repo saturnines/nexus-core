@@ -1879,3 +1879,180 @@ func TestConnector_EmptyResponseBody(t *testing.T) {
 		})
 	}
 }
+
+// TEST 20: Custom Header Propagation
+func TestConnector_CustomHeaderPropagation(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupMethod string
+		description string
+	}{
+		{
+			name:        "WithConnectorHTTPOptions",
+			setupMethod: "http_options",
+			description: "Headers added via WithConnectorHTTPOptions",
+		},
+		{
+			name:        "Direct WithHeader option",
+			setupMethod: "direct_header",
+			description: "Headers added via connector options",
+		},
+		{
+			name:        "Multiple custom headers",
+			setupMethod: "multiple_headers",
+			description: "Multiple custom headers propagated",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestHeaders []map[string]string
+			requestCount := 0
+
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
+
+				// Capture all headers for checking
+				headers := make(map[string]string)
+				for name, values := range r.Header {
+					if len(values) > 0 {
+						headers[name] = values[0] // Take first value
+					}
+				}
+				requestHeaders = append(requestHeaders, headers)
+
+				// Assert required headers are present
+				switch tt.setupMethod {
+				case "http_options", "direct_header":
+					if r.Header.Get("X-Test") != "hello" {
+						t.Errorf("Request %d: Expected X-Test header 'hello', got '%s'", requestCount, r.Header.Get("X-Test"))
+					}
+				case "multiple_headers":
+					if r.Header.Get("X-Test") != "hello" {
+						t.Errorf("Request %d: Expected X-Test header 'hello', got '%s'", requestCount, r.Header.Get("X-Test"))
+					}
+					if r.Header.Get("X-Custom") != "value" {
+						t.Errorf("Request %d: Expected X-Custom header 'value', got '%s'", requestCount, r.Header.Get("X-Custom"))
+					}
+					if r.Header.Get("Authorization") != "Bearer test-token" {
+						t.Errorf("Request %d: Expected Authorization header 'Bearer test-token', got '%s'", requestCount, r.Header.Get("Authorization"))
+					}
+				}
+
+				// Return paginated response to test header propagation across requests
+				var response map[string]interface{}
+				if requestCount == 1 {
+					response = map[string]interface{}{
+						"items": []interface{}{
+							map[string]interface{}{"id": 1, "name": "Item 1"},
+						},
+						"has_more": true,
+					}
+				} else {
+					response = map[string]interface{}{
+						"items": []interface{}{
+							map[string]interface{}{"id": 2, "name": "Item 2"},
+						},
+						"has_more": false,
+					}
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(response)
+
+				t.Logf("Request %d: Verified headers present", requestCount)
+			}))
+			defer mockServer.Close()
+
+			cfg := &config.Pipeline{
+				Name: "header-propagation-test",
+				Source: config.Source{
+					Type:     config.SourceTypeREST,
+					Endpoint: mockServer.URL,
+					ResponseMapping: config.ResponseMapping{
+						Fields: []config.Field{
+							{Name: "id", Path: "id"},
+							{Name: "name", Path: "name"},
+						},
+					},
+				},
+				Pagination: &config.Pagination{
+					Type:        config.PaginationTypePage,
+					PageParam:   "page",
+					SizeParam:   "size",
+					PageSize:    1,
+					HasMorePath: "has_more",
+				},
+			}
+
+			var connector *api.Connector
+			var err error
+
+			// Setup connector with different header methods
+			switch tt.setupMethod {
+			case "http_options":
+				connector, err = api.NewConnector(cfg, api.WithConnectorHTTPOptions(
+					api.WithCustomHTTPClient(&customHeaderClient{
+						client: &http.Client{Timeout: 30 * time.Second},
+						headers: map[string]string{
+							"X-Test": "hello",
+						},
+					}),
+				))
+			case "direct_header":
+				cfg.Source.Headers = map[string]string{
+					"X-Test": "hello",
+				}
+				connector, err = api.NewConnector(cfg)
+			case "multiple_headers":
+				cfg.Source.Headers = map[string]string{
+					"X-Test":        "hello",
+					"X-Custom":      "value",
+					"Authorization": "Bearer test-token",
+				}
+				connector, err = api.NewConnector(cfg)
+			}
+
+			if err != nil {
+				t.Fatalf("Failed to create connector: %v", err)
+			}
+
+			ctx := context.Background()
+			results, err := connector.Extract(ctx)
+			if err != nil {
+				t.Fatalf("Extract failed: %v", err)
+			}
+
+			// Verify we got both pages
+			if len(results) != 2 {
+				t.Errorf("Expected 2 results from pagination, got %d", len(results))
+			}
+
+			// Verify we made 2 requests
+			if requestCount != 2 {
+				t.Errorf("Expected 2 requests for pagination, got %d", requestCount)
+			}
+
+			// Verify headers were present on ALL requests
+			for i, headers := range requestHeaders {
+				t.Logf("Request %d headers: %+v", i+1, headers)
+			}
+
+			t.Logf("%s: Successfully propagated headers across %d requests", tt.description, requestCount)
+		})
+	}
+}
+
+// Custom HTTP client for testing header injection
+type customHeaderClient struct {
+	client  api.HTTPDoer
+	headers map[string]string
+}
+
+func (c *customHeaderClient) Do(req *http.Request) (*http.Response, error) {
+	// Add custom headers to every request
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
+	return c.client.Do(req)
+}
