@@ -81,9 +81,29 @@ func (o *OAuth2Auth) ApplyAuth(req *http.Request) error {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	// Check if we need to get a token (first time or expired)
-	if o.accessToken == "" || time.Now().After(o.expiresAt) {
+	// Determine the margin use RefreshBefore if set else default to 60s (haha magic numbers)
+	refreshBefore := 60
+	if o.RefreshBefore > 0 {
+		refreshBefore = o.RefreshBefore
+	}
+
+	// If expiresAt is zero we have never fetched a token
+	if o.expiresAt.IsZero() {
 		if err := o.refreshAccessToken(); err != nil {
+			return &TokenRefreshError{Cause: err}
+		}
+		// Token is fresh
+		req.Header.Set("Authorization", "Bearer "+o.accessToken)
+		return nil
+	}
+
+	// Calculate how long until true expiry
+	timeUntilExpiry := time.Until(o.expiresAt)
+
+	// If the token's lifetime is shorter than refreshBefore, refresh as soon as it's issued
+	if timeUntilExpiry <= time.Duration(refreshBefore)*time.Second {
+		if err := o.refreshAccessToken(); err != nil {
+			// If it really has expired, bubble up TokenRefreshError
 			if time.Now().After(o.expiresAt) {
 				return &TokenRefreshError{Cause: err}
 			}
@@ -91,7 +111,7 @@ func (o *OAuth2Auth) ApplyAuth(req *http.Request) error {
 		}
 	}
 
-	// apply token to request
+	// By now accessToken is valid within margin or beyond
 	req.Header.Set("Authorization", "Bearer "+o.accessToken)
 	return nil
 }
@@ -109,8 +129,10 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 		refreshBefore = o.RefreshBefore
 	}
 
-	if o.accessToken != "" && time.Now().Before(o.expiresAt.Add(time.Duration(refreshBefore)*time.Second)) {
-		return nil // Token is now fresh, no need to refresh
+	// FIXED: Use the same logic as ApplyAuth for consistency
+	timeUntilExpiry := time.Until(o.expiresAt)
+	if o.accessToken != "" && timeUntilExpiry > time.Duration(refreshBefore)*time.Second {
+		return nil // Token is fresh enough, no need to refresh
 	}
 
 	// Mark refresh in progress
@@ -182,14 +204,9 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 		o.refreshToken = tokenResp.RefreshToken
 	}
 
-	// Calculate token expiry
+	// FIXED: Store the ACTUAL expiry time (don't subtract RefreshBefore here)
 	if tokenResp.ExpiresIn > 0 {
-		delta := tokenResp.ExpiresIn - refreshBefore
-		if delta <= 0 {
-			o.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-		} else {
-			o.expiresAt = time.Now().Add(time.Duration(delta) * time.Second)
-		}
+		o.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 	} else {
 		// If no expiry provided default to 1 hour
 		o.expiresAt = time.Now().Add(1 * time.Hour)
