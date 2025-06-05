@@ -1762,3 +1762,120 @@ func TestConnector_MalformedJSON_UnclosedAndSyntaxErrors(t *testing.T) {
 		})
 	}
 }
+
+// TEST 19: Empty Response Body Handling
+func TestConnector_EmptyResponseBody(t *testing.T) {
+	tests := []struct {
+		name         string
+		responseBody string
+		contentType  string
+		shouldError  bool
+		description  string
+	}{
+		{
+			name:         "Completely empty body",
+			responseBody: "",
+			contentType:  "application/json",
+			shouldError:  true,
+			description:  "Server returns 200 OK with completely empty body",
+		},
+		{
+			name:         "Whitespace only body",
+			responseBody: "   \n\t  ",
+			contentType:  "application/json",
+			shouldError:  true,
+			description:  "Server returns 200 OK with only whitespace",
+		},
+		{
+			name:         "Empty JSON object",
+			responseBody: "{}",
+			contentType:  "application/json",
+			shouldError:  false,
+			description:  "Server returns empty JSON object",
+		},
+		{
+			name:         "Empty JSON array",
+			responseBody: "[]",
+			contentType:  "application/json",
+			shouldError:  true,
+			description:  "Server returns empty JSON array",
+		},
+		{
+			name:         "Null response",
+			responseBody: "null",
+			contentType:  "application/json",
+			shouldError:  false,
+			description:  "Server returns JSON null",
+		},
+		{
+			name:         "Empty with wrong content type",
+			responseBody: "",
+			contentType:  "text/html",
+			shouldError:  true,
+			description:  "Empty body with non-JSON content type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tt.contentType)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(tt.responseBody))
+			}))
+			defer mockServer.Close()
+
+			cfg := &config.Pipeline{
+				Name: "empty-response-test",
+				Source: config.Source{
+					Type:     config.SourceTypeREST,
+					Endpoint: mockServer.URL,
+					ResponseMapping: config.ResponseMapping{
+						Fields: []config.Field{
+							{Name: "id", Path: "id", DefaultValue: -1},
+							{Name: "name", Path: "name", DefaultValue: "unknown"},
+						},
+					},
+				},
+			}
+
+			connector, err := api.NewConnector(cfg)
+			if err != nil {
+				t.Fatalf("Failed to create connector: %v", err)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			results, err := connector.Extract(ctx)
+
+			if tt.shouldError {
+				if err == nil {
+					t.Errorf("Expected error for %s, got nil", tt.description)
+				} else {
+					// Verify it doesn't hang and returns proper error type
+					if !errors2.Is(err, errors2.ErrHTTPResponse) {
+						t.Errorf("Expected ErrHTTPResponse, got error type: %T", err)
+					}
+					t.Logf("%s: correctly returned error: %v", tt.description, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for %s: %v", tt.description, err)
+				} else {
+					t.Logf("%s: correctly handled, got %d results", tt.description, len(results))
+				}
+			}
+
+			// Verify it doesn't hangcontext timeout should catch this
+			select {
+			case <-ctx.Done():
+				if ctx.Err() == context.DeadlineExceeded {
+					t.Errorf("Connector appears to be hanging - context timeout reached")
+				}
+			default:
+				// test should be passing
+			}
+		})
+	}
+}
