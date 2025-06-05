@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -369,6 +370,7 @@ func TestConnector_OAuth2_TokenExpiry_DuringPagination(t *testing.T) {
 // TEST 4: Multiple concurrent token refresh attempts
 func TestConnector_OAuth2_ConcurrentRefresh_Prevention(t *testing.T) {
 	oauth2Mock := NewOAuth2MockServer()
+	oauth2Mock.TokenLifetime = 300 // 5 minutes
 	defer oauth2Mock.Close()
 
 	// Reset the mock between tests
@@ -407,15 +409,17 @@ func TestConnector_OAuth2_ConcurrentRefresh_Prevention(t *testing.T) {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
 
-	// Make the first request (this should trigger 401 → refresh → retry)
+	// Make the first request (this should trigger: initial token + 401 + refresh)
 	_, err = connector.Extract(context.Background())
 	if err != nil {
 		t.Fatalf("First extract failed: %v", err)
 	}
 
-	initialRefreshCount := oauth2Mock.RefreshCount
+	// Record state after first request completes
+	tokensAfterFirst := len(oauth2Mock.TokenRequests)
+	refreshesAfterFirst := oauth2Mock.RefreshCount
 
-	// Make additional requests (these should NOT trigger more refreshes since token is fresh)
+	// Make additional requests immediately (token should still be valid)
 	for i := 0; i < 2; i++ {
 		_, err := connector.Extract(context.Background())
 		if err != nil {
@@ -423,13 +427,25 @@ func TestConnector_OAuth2_ConcurrentRefresh_Prevention(t *testing.T) {
 		}
 	}
 
-	// Should have minimal additional refreshes
-	if oauth2Mock.RefreshCount > initialRefreshCount+1 {
-		t.Errorf("Too many token refreshes: expected ≤%d, got %d",
-			initialRefreshCount+1, oauth2Mock.RefreshCount)
+	// Check final counts
+	finalTokenRequests := len(oauth2Mock.TokenRequests)
+	finalRefreshCount := oauth2Mock.RefreshCount
+
+	// Should not have any additional token requests (token should be reused)
+	if finalTokenRequests > tokensAfterFirst {
+		t.Errorf("Token was unnecessarily refreshed: expected %d total requests, got %d",
+			tokensAfterFirst, finalTokenRequests)
+		t.Errorf("This suggests the token expired between requests")
 	}
 
-	t.Logf("Handled multiple requests with %d total token refreshes", oauth2Mock.RefreshCount)
+	// Should not have additional refreshes
+	if finalRefreshCount > refreshesAfterFirst {
+		t.Errorf("Unnecessary token refreshes: expected %d total refreshes, got %d",
+			refreshesAfterFirst, finalRefreshCount)
+	}
+
+	t.Logf("Successfully reused token: %d total token requests, %d refreshes",
+		finalTokenRequests, finalRefreshCount)
 }
 
 // ADD: Helper to reset test state
@@ -494,7 +510,7 @@ func TestConnector_OAuth2_MalformedTokenResponse(t *testing.T) {
 	}
 }
 
-// TEST 6: Pre‐emptive refresh using RefreshBefore margin
+// TEST 6: Preemptive refresh using RefreshBefore margin
 func TestConnector_OAuth2_PreemptiveRefresh(t *testing.T) {
 	// Token lifetime of 5 seconds, RefreshBefore=4 seconds → token should expire after 1s
 	oauth2Mock := NewOAuth2MockServer()
@@ -645,5 +661,67 @@ func TestConnector_OAuth2_TokenEndpointUnreachable(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "token request failed") {
 		t.Errorf("Expected token request error, got: %v", err)
+	}
+}
+
+func TestConnector_OAuth2_ConcurrentRefresh_TrueConcurrency(t *testing.T) {
+	// Token endpoint that counts requests
+	oauth2Mock := NewOAuth2MockServer()
+	oauth2Mock.TokenLifetime = 300 // token lives long enough
+	defer oauth2Mock.Close()
+
+	// Simple API that always returns a valid JSON payload
+	apiMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items":[{"id":1,"name":"X"}]}`))
+	}))
+	defer apiMock.Close()
+
+	cfg := &config.Pipeline{
+		Name: "oauth2-concurrent-real-test",
+		Source: config.Source{
+			Type:     config.SourceTypeREST,
+			Endpoint: apiMock.URL,
+			Auth: &config.Auth{
+				Type: config.AuthTypeOAuth2,
+				OAuth2: &config.OAuth2Auth{
+					TokenURL:      oauth2Mock.Server.URL,
+					ClientID:      "test-client",
+					ClientSecret:  "test-secret",
+					RefreshBefore: 0, // no pre‐emptive refresh
+				},
+			},
+			ResponseMapping: config.ResponseMapping{
+				Fields: []config.Field{{Name: "id", Path: "id"}},
+			},
+		},
+	}
+
+	connector, err := api.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create connector: %v", err)
+	}
+
+	// Launch several goroutines that all call Extract at once
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	n := 5
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			// We ignore the results; we only care about token fetches
+			connector.Extract(context.Background())
+		}()
+	}
+
+	// Let them all proceed simultaneously
+	close(start)
+	wg.Wait()
+
+	// Only one token request should have been made
+	if got := len(oauth2Mock.TokenRequests); got != 1 {
+		t.Errorf("expected 1 token request, got %d", got)
 	}
 }
