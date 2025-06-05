@@ -124,12 +124,12 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 	}
 
 	// Check if token was refreshed while we were waiting
-	refreshBefore := 60
-	if o.RefreshBefore > 0 {
-		refreshBefore = o.RefreshBefore
+	refreshBefore := o.RefreshBefore
+	if refreshBefore < 0 {
+		refreshBefore = 0
 	}
 
-	// FIXED: Use the same logic as ApplyAuth for consistency
+	// Use the same logic as ApplyAuth for consistency
 	timeUntilExpiry := time.Until(o.expiresAt)
 	if o.accessToken != "" && timeUntilExpiry > time.Duration(refreshBefore)*time.Second {
 		return nil // Token is fresh enough, no need to refresh
@@ -204,7 +204,7 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 		o.refreshToken = tokenResp.RefreshToken
 	}
 
-	// FIXED: Store the ACTUAL expiry time (don't subtract RefreshBefore here)
+	// Store the ACTUAL expiry time
 	if tokenResp.ExpiresIn > 0 {
 		o.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 	} else {
