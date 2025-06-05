@@ -35,6 +35,10 @@ type OAuth2Auth struct {
 	refreshToken string     // token used to refresh access token
 	expiresAt    time.Time  // token expiry time
 	mutex        sync.Mutex // prevent concurrent token refreshes
+
+	// Concurrency control
+	refreshInProgress bool
+	refreshCond       *sync.Cond
 }
 
 // TokenResponse represents the response from the OAuth2 token endpoint
@@ -58,14 +62,18 @@ func NewOAuth2Auth(tokenURL, clientID, clientSecret, scope string, extraParams m
 		return nil, fmt.Errorf("client secret is required for OAuth2")
 	}
 
-	return &OAuth2Auth{
+	auth := &OAuth2Auth{
 		TokenURL:      tokenURL,
 		ClientID:      clientID,
 		ClientSecret:  clientSecret,
 		Scope:         scope,
 		ExtraParams:   extraParams,
 		RefreshBefore: refreshBefore,
-	}, nil
+	}
+
+	auth.refreshCond = sync.NewCond(&auth.mutex)
+
+	return auth, nil
 }
 
 // ApplyAuth adds the OAuth2 token to the request
@@ -90,6 +98,28 @@ func (o *OAuth2Auth) ApplyAuth(req *http.Request) error {
 
 // refreshAccessToken gets a new access token using client credentials grant
 func (o *OAuth2Auth) refreshAccessToken() error {
+	// Check if another goroutine is already refreshing
+	for o.refreshInProgress {
+		o.refreshCond.Wait()
+	}
+
+	// Check if token was refreshed while we were waiting
+	refreshBefore := 60
+	if o.RefreshBefore > 0 {
+		refreshBefore = o.RefreshBefore
+	}
+
+	if o.accessToken != "" && time.Now().Before(o.expiresAt.Add(time.Duration(refreshBefore)*time.Second)) {
+		return nil // Token is now fresh, no need to refresh
+	}
+
+	// Mark refresh in progress
+	o.refreshInProgress = true
+	defer func() {
+		o.refreshInProgress = false
+		o.refreshCond.Broadcast() // Wake up waiting goroutines
+	}()
+
 	// Prepare the token request
 	data := url.Values{}
 
@@ -153,14 +183,13 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 	}
 
 	// Calculate token expiry
-	refreshBefore := 60 // Default 60 seconds if not set
-	if o.RefreshBefore > 0 {
-		refreshBefore = o.RefreshBefore
-	}
-
 	if tokenResp.ExpiresIn > 0 {
-		// Use the configurable refresh margin
-		o.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn-refreshBefore) * time.Second)
+		delta := tokenResp.ExpiresIn - refreshBefore
+		if delta <= 0 {
+			o.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+		} else {
+			o.expiresAt = time.Now().Add(time.Duration(delta) * time.Second)
+		}
 	} else {
 		// If no expiry provided default to 1 hour
 		o.expiresAt = time.Now().Add(1 * time.Hour)
