@@ -199,7 +199,7 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	// This is so ugly
 	opts := make(map[string]interface{})
 	p := c.config.Pagination
 	switch p.Type {
@@ -312,12 +312,12 @@ func (c *Connector) processResponse(resp *http.Response) ([]interface{}, error) 
 		)
 	}
 
-	var responseData map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
-		return nil, errors2.WrapError(err, errors2.ErrHTTPResponse, "failed to decode response JSON")
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors2.WrapError(err, errors2.ErrHTTPResponse, "failed to read response body")
 	}
 
-	return c.extractItems(responseData)
+	return c.processResponseFromBytes(resp.StatusCode, bodyBytes)
 }
 
 // processResponseFromBytes processes response from pre-read body bytes (for pagination)
@@ -330,12 +330,27 @@ func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) (
 		)
 	}
 
-	var responseData map[string]interface{}
+	// Try to detect if response is an array or object
+	var responseData interface{}
 	if err := json.Unmarshal(bodyBytes, &responseData); err != nil {
 		return nil, errors2.WrapError(err, errors2.ErrHTTPResponse, "failed to decode response JSON")
 	}
 
-	return c.extractItems(responseData)
+	// Handle array at root level (like JSONPlaceholder)
+	if arr, ok := responseData.([]interface{}); ok {
+		return arr, nil
+	}
+
+	// Handle object with nested arrays (your existing logic)
+	if objMap, ok := responseData.(map[string]interface{}); ok {
+		return c.extractItems(objMap)
+	}
+
+	return nil, errors2.WrapError(
+		fmt.Errorf("unexpected response format: %T", responseData),
+		errors2.ErrHTTPResponse,
+		"invalid response structure",
+	)
 }
 
 // extractItems pulls out the slice of items from the response JSON,
