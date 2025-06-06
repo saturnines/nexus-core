@@ -11,9 +11,25 @@ import (
 // parseBody reads and parses JSON into a generic map.
 func parseBody(resp *http.Response) (map[string]interface{}, error) {
 	defer resp.Body.Close()
-	var data map[string]interface{}
-	err := json.NewDecoder(resp.Body).Decode(&data)
-	return data, err
+
+	var raw interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	// If it's already an object, return it
+	if obj, ok := raw.(map[string]interface{}); ok {
+		return obj, nil
+	}
+
+	// If it's an array, wrap it in a data field
+	if arr, ok := raw.([]interface{}); ok {
+		return map[string]interface{}{
+			"data": arr,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("unexpected response type: %T", raw)
 }
 
 func lookupString(body map[string]interface{}, path string) (string, error) {
