@@ -81,60 +81,49 @@ func (o *OAuth2Auth) ApplyAuth(req *http.Request) error {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	// Determine the margin use RefreshBefore if set else default to 60s (haha magic numbers)
 	refreshBefore := 60
 	if o.RefreshBefore > 0 {
 		refreshBefore = o.RefreshBefore
 	}
 
-	// If expiresAt is zero we have never fetched a token
+	needsRefresh := false
 	if o.expiresAt.IsZero() {
-		if err := o.refreshAccessToken(); err != nil {
-			return &TokenRefreshError{Cause: err}
+		// Never fetched a token
+		needsRefresh = true
+	} else {
+		// Calculate how long until true expiry
+		timeUntilExpiry := time.Until(o.expiresAt)
+		if timeUntilExpiry <= time.Duration(refreshBefore)*time.Second {
+			needsRefresh = true
 		}
-		// Token is fresh
-		req.Header.Set("Authorization", "Bearer "+o.accessToken)
-		return nil
 	}
+	if needsRefresh {
+		for o.refreshInProgress {
+			o.refreshCond.Wait()
+		}
+		if o.expiresAt.IsZero() {
+			needsRefresh = true
+		} else {
+			timeUntilExpiry := time.Until(o.expiresAt)
+			needsRefresh = timeUntilExpiry <= time.Duration(refreshBefore)*time.Second
+		}
 
-	// Calculate how long until true expiry
-	timeUntilExpiry := time.Until(o.expiresAt)
-
-	// If the token's lifetime is shorter than refreshBefore, refresh as soon as it's issued
-	if timeUntilExpiry <= time.Duration(refreshBefore)*time.Second {
-		if err := o.refreshAccessToken(); err != nil {
-			// If it really has expired, bubble up TokenRefreshError
-			if time.Now().After(o.expiresAt) {
+		// If we still need to refresh, do it
+		if needsRefresh {
+			if err := o.refreshAccessToken(); err != nil {
 				return &TokenRefreshError{Cause: err}
 			}
-			return fmt.Errorf("failed to get OAuth2 token: %w", err)
 		}
 	}
-
-	// By now accessToken is valid within margin or beyond
+	if o.accessToken == "" {
+		return fmt.Errorf("no valid access token available")
+	}
 	req.Header.Set("Authorization", "Bearer "+o.accessToken)
 	return nil
 }
 
 // refreshAccessToken gets a new access token using client credentials grant
 func (o *OAuth2Auth) refreshAccessToken() error {
-	// Check if another goroutine is already refreshing
-	for o.refreshInProgress {
-		o.refreshCond.Wait()
-	}
-
-	// Check if token was refreshed while we were waiting
-	refreshBefore := o.RefreshBefore
-	if refreshBefore < 0 {
-		refreshBefore = 0
-	}
-
-	// Use the same logic as ApplyAuth for consistency
-	timeUntilExpiry := time.Until(o.expiresAt)
-	if o.accessToken != "" && timeUntilExpiry > time.Duration(refreshBefore)*time.Second {
-		return nil // Token is fresh enough, no need to refresh
-	}
-
 	// Mark refresh in progress
 	o.refreshInProgress = true
 	defer func() {
