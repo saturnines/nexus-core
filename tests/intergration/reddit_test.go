@@ -1,4 +1,3 @@
-// tests/integration/reddit_test.go
 package integration
 
 import (
