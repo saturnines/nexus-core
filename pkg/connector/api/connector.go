@@ -336,6 +336,11 @@ func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) (
 		return nil, errors2.WrapError(err, errors2.ErrHTTPResponse, "failed to decode response JSON")
 	}
 
+	// Handle null response
+	if responseData == nil {
+		return []interface{}{}, nil
+	}
+
 	// Handle array at root level (like JSONPlaceholder)
 	if arr, ok := responseData.([]interface{}); ok {
 		return arr, nil
