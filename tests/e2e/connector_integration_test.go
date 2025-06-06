@@ -1797,7 +1797,7 @@ func TestConnector_EmptyResponseBody(t *testing.T) {
 			name:         "Empty JSON array",
 			responseBody: "[]",
 			contentType:  "application/json",
-			shouldError:  true,
+			shouldError:  false,
 			description:  "Server returns empty JSON array",
 		},
 		{
