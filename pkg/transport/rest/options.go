@@ -1,6 +1,6 @@
 // pkg/connector/api/options.go
 
-package api
+package rest
 
 import (
 	"net/http"
