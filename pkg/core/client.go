@@ -7,7 +7,6 @@ import (
 	"github.com/saturnines/nexus-core/pkg/transport/rest"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -83,35 +82,4 @@ func ExtractJSON(resp *http.Response, target interface{}) error {
 	}
 
 	return nil
-}
-
-// ExtractField extracts a field from a map using a dotted path
-func ExtractField(data map[string]interface{}, path string) (interface{}, bool) {
-	if path == "" {
-		return nil, false
-	}
-
-	// Simple case - no dots
-	if !strings.Contains(path, ".") {
-		value, ok := data[path]
-		return value, ok
-	}
-
-	// Nested case - traverse the path
-	parts := strings.Split(path, ".")
-	var current interface{} = data
-
-	for _, part := range parts {
-		currentMap, ok := current.(map[string]interface{})
-		if !ok {
-			return nil, false
-		}
-
-		current, ok = currentMap[part]
-		if !ok {
-			return nil, false
-		}
-	}
-
-	return current, true
 }

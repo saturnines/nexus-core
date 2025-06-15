@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/saturnines/nexus-core/pkg/config"
-	"github.com/saturnines/nexus-core/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/core"
 	"net/http"
 	"net/http/httptest"
 	"strconv"

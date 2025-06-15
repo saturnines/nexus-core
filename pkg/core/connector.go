@@ -37,14 +37,21 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 
 	// Auth handler
 	var authHandler auth.Handler
+	httpClient := &http.Client{Timeout: 30 * time.Second}
 	if cfg.Source.Auth != nil {
 		h, err := auth.CreateHandler(cfg.Source.Auth)
 		if err != nil {
-			return nil, errors.WrapError(err, errors.ErrAuthentication, "auth handler") // ✅ Fixed
+			return nil, errors.WrapError(err, errors.ErrAuthentication, "auth handler")
 		}
-		authHandler = h
-	}
 
+		// Handle OAuth2 differently - use RoundTripper instead of ApplyAuth
+		if oauth2Auth, ok := h.(*auth.OAuth2Auth); ok {
+			httpClient.Transport = auth.NewOAuth2RoundTripper(httpClient.Transport, oauth2Auth)
+			authHandler = nil // Don't use ApplyAuth for OAuth2
+		} else {
+			authHandler = h // Use ApplyAuth for other auth types
+		}
+	}
 	// Request builder
 	builder := rest.NewBuilder(
 		cfg.Source.Endpoint,
@@ -377,4 +384,17 @@ func ExtractField(data map[string]interface{}, path string) (interface{}, bool) 
 	}
 
 	return current, true
+}
+
+func WithConnectorHTTPOptions(options ...rest.HTTPClientOption) ConnectorOption {
+	return func(c *Connector) {
+		var doer rest.HTTPDoer = c.client
+		for _, option := range options {
+			doer = option(doer)
+		}
+
+		if client, ok := doer.(*http.Client); ok {
+			c.client = client
+		}
+	}
 }

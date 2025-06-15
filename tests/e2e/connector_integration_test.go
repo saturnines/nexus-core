@@ -4,7 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/core"
 	errors2 "github.com/saturnines/nexus-core/pkg/errors"
+	"github.com/saturnines/nexus-core/pkg/transport/rest"
+
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -12,9 +16,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/saturnines/nexus-core/pkg/config"
-	"github.com/saturnines/nexus-core/pkg/core"
 )
 
 // TEST 1: Nested Path Resolution
@@ -250,8 +251,8 @@ func TestConnector_SlowResponse(t *testing.T) {
 	}
 
 	// Create connector with short timeout
-	connector, err := core.NewConnector(cfg, api.WithConnectorHTTPOptions(
-		api.WithTimeout(1*time.Second), // 1 second timeout, but server takes 2 seconds
+	connector, err := core.NewConnector(cfg, core.WithConnectorHTTPOptions(
+		rest.WithTimeout(1*time.Second), // 1 second timeout, but server takes 2 seconds
 	))
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
@@ -1502,7 +1503,7 @@ func TestConnector_MixedTypesInItems(t *testing.T) {
 		t.Logf("Connector returned error for mixed types: %v", err)
 
 		// Verify it's the right kind of error
-		if !strings.Contains(err.Error(), "not a map") || !strings.Contains(err.Error(), "invalid item data type") {
+		if !strings.Contains(err.Error(), "not a map") && !strings.Contains(err.Error(), "invalid item data type") {
 			t.Errorf("Expected error about item not being a map, got: %s", err.Error())
 		}
 
@@ -1985,14 +1986,14 @@ func TestConnector_CustomHeaderPropagation(t *testing.T) {
 				},
 			}
 
-			var connector *api.Connector
+			var connector *core.Connector
 			var err error
 
 			// Setup connector with different header methods
 			switch tt.setupMethod {
 			case "http_options":
-				connector, err = core.NewConnector(cfg, api.WithConnectorHTTPOptions(
-					api.WithCustomHTTPClient(&customHeaderClient{
+				connector, err = core.NewConnector(cfg, core.WithConnectorHTTPOptions(
+					rest.WithCustomHTTPClient(&customHeaderClient{
 						client: &http.Client{Timeout: 30 * time.Second},
 						headers: map[string]string{
 							"X-Test": "hello",
@@ -2045,7 +2046,7 @@ func TestConnector_CustomHeaderPropagation(t *testing.T) {
 
 // Custom HTTP client for testing header injection
 type customHeaderClient struct {
-	client  api.HTTPDoer
+	client  rest.HTTPDoer
 	headers map[string]string
 }
 

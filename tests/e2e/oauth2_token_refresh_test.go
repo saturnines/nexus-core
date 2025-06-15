@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/saturnines/nexus-core/pkg/config"
-	"github.com/saturnines/nexus-core/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/core"
 )
 
 // Helper struct to track OAuth2 server state

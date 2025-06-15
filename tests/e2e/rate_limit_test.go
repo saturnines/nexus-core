@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/saturnines/nexus-core/pkg/config"
-	"github.com/saturnines/nexus-core/pkg/connector/api"
+
 	errors2 "github.com/saturnines/nexus-core/pkg/errors"
 )
 
