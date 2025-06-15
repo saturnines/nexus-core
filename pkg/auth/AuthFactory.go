@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"Nexus/pkg/config"
-	"Nexus/pkg/errors"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/errors"
 )
 
 // CreateHandlerWithRegistry creates an auth handler using the provided registry

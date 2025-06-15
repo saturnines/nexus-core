@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/core"
 )
 
 // TEST 1: Basic JSONPlaceholder posts extraction
@@ -32,7 +32,7 @@ func TestJSONPlaceholder_Posts_Basic(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestJSONPlaceholder_Posts_WithPagination(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg) // ← ADD THIS LINE
+	connector, err := core.NewConnector(cfg) // ← ADD THIS LINE
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestJSONPlaceholder_Users_NestedFields(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestJSONPlaceholder_Comments_WithQuery(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -316,7 +316,7 @@ func TestJSONPlaceholder_InvalidEndpoint(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}

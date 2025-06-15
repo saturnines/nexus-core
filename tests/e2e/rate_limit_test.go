@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/core"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -11,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
-	errors2 "Nexus/pkg/errors"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/connector/api"
+	errors2 "github.com/saturnines/nexus-core/pkg/errors"
 )
 
 // TEST 1: Rate limit on first request
@@ -119,7 +120,7 @@ func TestConnector_RateLimit_429Response(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -193,7 +194,7 @@ func TestConnector_RateLimit_SingleRequest(t *testing.T) {
 		// No pagination, single request
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -277,7 +278,7 @@ func TestConnector_RateLimit_LinkPagination(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -361,7 +362,7 @@ func TestConnector_RateLimit_OAuth2_WithAuth(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}

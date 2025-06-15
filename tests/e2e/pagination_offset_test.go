@@ -1,11 +1,11 @@
 package api
 
 import (
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/connector/api"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -92,7 +92,7 @@ func TestConnector_OffsetPagination_Complete(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestConnector_OffsetPagination_EdgeCases(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -312,7 +312,7 @@ func TestConnector_OffsetPagination_ZeroResults(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -379,7 +379,7 @@ func TestConnector_OffsetPagination_ServerError(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -472,7 +472,7 @@ func TestConnector_OffsetPagination_TotalCount(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}

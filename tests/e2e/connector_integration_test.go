@@ -1,10 +1,10 @@
 package api_test
 
 import (
-	errors2 "Nexus/pkg/errors"
 	"context"
 	"encoding/json"
 	"fmt"
+	errors2 "github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/core"
 )
 
 // TEST 1: Nested Path Resolution
@@ -63,7 +63,7 @@ func TestConnector_NestedPaths_WillProbablyFail(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestConnector_MalformedJSON(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestConnector_EmptyResponse(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestConnector_MissingFieldsWithDefaults(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestConnector_SlowResponse(t *testing.T) {
 	}
 
 	// Create connector with short timeout
-	connector, err := api.NewConnector(cfg, api.WithConnectorHTTPOptions(
+	connector, err := core.NewConnector(cfg, api.WithConnectorHTTPOptions(
 		api.WithTimeout(1*time.Second), // 1 second timeout, but server takes 2 seconds
 	))
 	if err != nil {
@@ -300,7 +300,7 @@ func TestConnector_DifferentResponseStructure(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestConnector_PagePagination(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestConnector_PagePagination_TotalPages(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -633,7 +633,7 @@ func TestConnector_PagePagination_TotalPages_EdgeCases(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -733,7 +733,7 @@ func TestConnector_MissingRootPath_NestedData(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -890,7 +890,7 @@ func TestConnector_RootPath_EdgeCases(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -967,7 +967,7 @@ func TestConnector_SingleObjectFallback(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -1096,7 +1096,7 @@ func TestConnector_SingleObjectFallback_EdgeCases(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -1190,7 +1190,7 @@ func TestConnector_DefaultValueUsage(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -1415,7 +1415,7 @@ func TestConnector_DefaultValueEdgeCases(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -1488,7 +1488,7 @@ func TestConnector_MixedTypesInItems(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -1630,7 +1630,7 @@ func TestConnector_MixedTypesEdgeCases(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -1738,7 +1738,7 @@ func TestConnector_MalformedJSON_UnclosedAndSyntaxErrors(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -1839,7 +1839,7 @@ func TestConnector_EmptyResponseBody(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -1991,7 +1991,7 @@ func TestConnector_CustomHeaderPropagation(t *testing.T) {
 			// Setup connector with different header methods
 			switch tt.setupMethod {
 			case "http_options":
-				connector, err = api.NewConnector(cfg, api.WithConnectorHTTPOptions(
+				connector, err = core.NewConnector(cfg, api.WithConnectorHTTPOptions(
 					api.WithCustomHTTPClient(&customHeaderClient{
 						client: &http.Client{Timeout: 30 * time.Second},
 						headers: map[string]string{
@@ -2003,14 +2003,14 @@ func TestConnector_CustomHeaderPropagation(t *testing.T) {
 				cfg.Source.Headers = map[string]string{
 					"X-Test": "hello",
 				}
-				connector, err = api.NewConnector(cfg)
+				connector, err = core.NewConnector(cfg)
 			case "multiple_headers":
 				cfg.Source.Headers = map[string]string{
 					"X-Test":        "hello",
 					"X-Custom":      "value",
 					"Authorization": "Bearer test-token",
 				}
-				connector, err = api.NewConnector(cfg)
+				connector, err = core.NewConnector(cfg)
 			}
 
 			if err != nil {

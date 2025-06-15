@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"Nexus/pkg/config"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/config"
 )
 
 // Creator functions for auth handlers

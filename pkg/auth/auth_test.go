@@ -3,8 +3,8 @@
 package auth
 
 import (
-	"Nexus/pkg/config"
 	"encoding/base64"
+	"github.com/saturnines/nexus-core/pkg/config"
 	"net/http"
 	"net/http/httptest"
 	"strings"

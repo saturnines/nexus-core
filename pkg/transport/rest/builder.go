@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"nexus-core/pkg/auth"
+	"github.com/saturnines/nexus-core/pkg/auth"
 )
 
 // Builder builds REST HTTP requests.

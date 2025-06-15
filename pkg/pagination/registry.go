@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"Nexus/pkg/errors"
+	"github.com/saturnines/nexus-core/pkg/errors"
 )
 
 // Creator builds a Pager or errors on bad opts.

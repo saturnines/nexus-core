@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/core"
 )
 
 // TEST 1: Basic Reddit post extraction from r/programming
@@ -47,7 +47,7 @@ func TestReddit_Programming_BasicExtraction(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestReddit_Programming_QueryParameters(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestReddit_GoLang_NestedFields(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestReddit_InvalidSubreddit_ErrorHandling(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -312,7 +312,7 @@ func TestReddit_RateLimitBehavior(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}

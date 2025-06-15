@@ -1,11 +1,12 @@
 package api
 
 import (
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/core"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -97,7 +98,7 @@ func TestConnector_LinkPagination_Complete(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -241,7 +242,7 @@ func TestConnector_LinkPagination_MalformedHeaders(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -319,7 +320,7 @@ func TestConnector_LinkPagination_RelativeURLs(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -372,7 +373,7 @@ func TestConnector_LinkPagination_SinglePage(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -431,7 +432,7 @@ func TestConnector_LinkPagination_ServerError(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -517,7 +518,7 @@ func TestConnector_LinkPagination_ComplexHeaders(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}

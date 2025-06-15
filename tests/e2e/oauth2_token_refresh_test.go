@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/connector/api"
 )
 
 // Helper struct to track OAuth2 server state
@@ -177,7 +177,7 @@ func TestConnector_OAuth2_TokenRefresh_Success(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestConnector_OAuth2_TokenRefresh_Failure(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestConnector_OAuth2_TokenExpiry_DuringPagination(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestConnector_OAuth2_ConcurrentRefresh_Prevention(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestConnector_OAuth2_MalformedTokenResponse(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -541,7 +541,7 @@ func TestConnector_OAuth2_PreemptiveRefresh(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -609,7 +609,7 @@ func TestConnector_OAuth2_NoRefreshOnNon401(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -650,7 +650,7 @@ func TestConnector_OAuth2_TokenEndpointUnreachable(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -697,7 +697,7 @@ func TestConnector_OAuth2_ConcurrentRefresh_TrueConcurrency(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}

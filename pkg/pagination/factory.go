@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"Nexus/pkg/errors"
+	"github.com/saturnines/nexus-core/pkg/errors"
 )
 
 // Factory holds a registry of Pager creators.

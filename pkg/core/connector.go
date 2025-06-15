@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"time"
 
-	"nexus-core/pkg/auth"
-	"nexus-core/pkg/config"
-	"nexus-core/pkg/errors"
-	"nexus-core/pkg/pagination"
-	"nexus-core/pkg/transport/rest"
+	"github.com/saturnines/nexus-core/pkg/auth"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/errors"
+	"github.com/saturnines/nexus-core/pkg/pagination"
+	"github.com/saturnines/nexus-core/pkg/transport/rest"
 )
 
 // Connector orchestrates requests, pagination and handling.

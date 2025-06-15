@@ -1,9 +1,9 @@
 package auth
 
 import (
-	"Nexus/pkg/config"
-	"Nexus/pkg/errors" // Add this import
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/errors" // Add this import
 	"sync"
 )
 

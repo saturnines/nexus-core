@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"testing"
 
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/core"
 )
 
 // TestConnector_PagePagination_Complete tests robust page based pagination
@@ -91,7 +91,7 @@ func TestConnector_PagePagination_Complete(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestConnector_PagePagination_EdgeCases(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -316,7 +316,7 @@ func TestConnector_PagePagination_ErrorRecovery(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -367,7 +367,7 @@ func TestConnector_PagePagination_EmptyFirstPage(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}

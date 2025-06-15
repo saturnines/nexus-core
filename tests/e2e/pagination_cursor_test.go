@@ -1,11 +1,12 @@
 package api
 
 import (
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/connector/api"
+	"github.com/saturnines/nexus-core/pkg/core"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -99,7 +100,7 @@ func TestConnector_CursorPagination_Complete(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -217,7 +218,7 @@ func TestConnector_CursorPagination_NestedPath(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -294,7 +295,7 @@ func TestConnector_CursorPagination_SpecialCharacters(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
@@ -430,7 +431,7 @@ func TestConnector_CursorPagination_EdgeCases(t *testing.T) {
 				},
 			}
 
-			connector, err := api.NewConnector(cfg)
+			connector, err := core.NewConnector(cfg)
 			if err != nil {
 				t.Fatalf("Failed to create connector: %v", err)
 			}
@@ -487,7 +488,7 @@ func TestConnector_CursorPagination_EmptyDataset(t *testing.T) {
 		},
 	}
 
-	connector, err := api.NewConnector(cfg)
+	connector, err := core.NewConnector(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
