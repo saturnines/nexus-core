@@ -392,10 +392,25 @@ func WithConnectorHTTPOptions(options ...rest.HTTPClientOption) ConnectorOption 
 		for _, option := range options {
 			doer = option(doer)
 		}
+
+		// Handle both *http.Client and custom HTTPDoer
 		if client, ok := doer.(*http.Client); ok {
 			c.client = client
+		} else {
+			c.client = &http.Client{
+				Transport: &customRoundTripper{doer: doer},
+				Timeout:   c.client.Timeout,
+			}
 		}
 	}
+}
+
+type customRoundTripper struct {
+	doer rest.HTTPDoer
+}
+
+func (rt *customRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return rt.doer.Do(req)
 }
 
 func WithTimeout(timeout time.Duration) ConnectorOption {
