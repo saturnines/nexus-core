@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/saturnines/nexus-core/pkg/auth"
@@ -18,90 +19,163 @@ import (
 
 // Connector orchestrates requests, pagination and handling.
 type Connector struct {
-	builder RequestBuilder
-	pager   pagination.Pager
-	client  *http.Client
-	cfg     *config.Pipeline
+	builder     RequestBuilder
+	client      *http.Client
+	cfg         *config.Pipeline
+	authHandler auth.Handler
+	factory     *pagination.Factory
 }
 
-// NewConnector picks a Builder and a Pager based on cfg.
-func NewConnector(cfg *config.Pipeline) (*Connector, error) {
-	h, err := auth.CreateHandler(cfg.Source.Auth)
-	if err != nil {
-		return nil, errors.Wrap(err, "auth handler")
-	}
+// ConnectorOption allows customizing Connector.
+type ConnectorOption func(*Connector)
 
-	var builder RequestBuilder
-	var pager pagination.Pager
-
-	switch cfg.Source.Type {
-	case config.SourceTypeREST:
-		builder = rest.NewBuilder(
-			cfg.Source.Endpoint,
-			cfg.Source.Method,
-			cfg.Source.Headers,
-			cfg.Source.QueryParams,
-			h,
-		)
-		pager = pagination.DefaultFactory.New(cfg.Source.Paging.Type)
-	default:
+// NewConnector creates a connector based on config
+func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, error) {
+	if cfg.Source.Type != config.SourceTypeREST {
 		return nil, fmt.Errorf("unsupported source type: %s", cfg.Source.Type)
 	}
 
-	return &Connector{
-		builder: builder,
-		pager:   pager,
-		client:  &http.Client{Timeout: 30 * time.Second},
-		cfg:     cfg,
-	}, nil
-}
-
-// Extract runs the loop: build → send → handle → page.
-func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, error) {
-	var all []map[string]interface{}
-
-	req, err := c.builder.Build(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "build request")
+	// Auth handler
+	var authHandler auth.Handler
+	if cfg.Source.Auth != nil {
+		h, err := auth.CreateHandler(cfg.Source.Auth)
+		if err != nil {
+			return nil, errors.WrapError(err, errors.ErrAuthentication, "auth handler") // ✅ Fixed
+		}
+		authHandler = h
 	}
 
-	for {
-		resp, err := c.client.Do(req)
+	// Request builder
+	builder := rest.NewBuilder(
+		cfg.Source.Endpoint,
+		cfg.Source.Method,
+		cfg.Source.Headers,
+		cfg.Source.QueryParams,
+		authHandler,
+	)
+
+	conn := &Connector{
+		builder:     builder,
+		client:      &http.Client{Timeout: 30 * time.Second},
+		cfg:         cfg,
+		authHandler: authHandler,
+		factory:     pagination.DefaultFactory,
+	}
+
+	for _, opt := range opts {
+		opt(conn)
+	}
+
+	return conn, nil
+}
+
+// Extract runs the extraction process
+func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, error) {
+	var allResults []map[string]interface{}
+
+	// If no pagination configured: single-request path
+	if c.cfg.Pagination == nil {
+		req, err := c.builder.Build(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "http do")
+			return nil, errors.WrapError(err, errors.ErrHTTPRequest, "build request") // ✅ Fixed
 		}
 
-		batch, err := c.handleResponse(resp)
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, errors.WrapError(err, errors.ErrHTTPRequest, "http do") // ✅ Fixed
+		}
+
+		batch, err := c.handleResponse(resp) // ✅ This method is defined below
 		if err != nil {
 			return nil, err
 		}
-		all = append(all, batch...)
 
-		if !c.pager.HasNext() {
-			break
-		}
-		if err := c.pager.Update(resp); err != nil {
-			return nil, errors.Wrap(err, "paginate")
-		}
-
-		req, err = c.builder.Build(ctx)
-		if err != nil {
-			return nil, errors.Wrap(err, "build next request")
-		}
+		return batch, nil
 	}
 
-	return all, nil
+	// Pagination path
+	pager, err := c.createPager(ctx)
+	if err != nil {
+		return nil, errors.WrapError(err, errors.ErrPagination, "create pager")
+	}
+
+	for {
+		req, err := pager.NextRequest()
+		if err != nil {
+			return nil, errors.WrapError(err, errors.ErrPagination, "get next request")
+		}
+		if req == nil {
+			break // No more pages
+		}
+
+		// Apply auth if we have a handler
+		if c.authHandler != nil {
+			if err := c.authHandler.ApplyAuth(req); err != nil {
+				return nil, c.handleAuthError(err)
+			}
+		}
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, errors.WrapError(err, errors.ErrHTTPRequest, "http do")
+		}
+
+		// Read body once
+		bodyBytes, err := c.readResponseBody(resp)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create buffered response for pager
+		bufferedResp := c.createBufferedResponse(resp, bodyBytes)
+
+		// Update pager state
+		if err := pager.UpdateState(bufferedResp); err != nil {
+			return nil, errors.WrapError(err, errors.ErrPagination, "update pager state")
+		}
+
+		// Process response for item extraction
+		items, err := c.processResponseFromBytes(resp.StatusCode, bodyBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		pageResults, err := c.extractFields(items)
+		if err != nil {
+			return nil, errors.WrapError(err, errors.ErrExtraction, "extract fields")
+		}
+
+		allResults = append(allResults, pageResults...)
+	}
+
+	return allResults, nil
 }
 
-// createPager uses the pagination.Factory to build a Pager based on config.
+// createPager creates a pager based on pagination config
 func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
-	baseReq, err := c.createBaseRequest(ctx)
+	if c.cfg.Pagination == nil {
+		return nil, nil
+	}
+
+	req, err := c.builder.Build(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// This is so ugly
+
+	opts := c.paginationConfigToPagerOptions()
+	return c.factory.CreatePager(
+		string(c.cfg.Pagination.Type),
+		c.client,
+		req,
+		opts,
+	)
+}
+
+// paginationConfigToPagerOptions converts config to pager options
+func (c *Connector) paginationConfigToPagerOptions() map[string]interface{} {
 	opts := make(map[string]interface{})
-	p := c.config.Pagination
+	p := c.cfg.Pagination
+
 	switch p.Type {
 	case config.PaginationTypePage:
 		opts["pageParam"] = p.PageParam
@@ -110,7 +184,6 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 		opts["totalPagesPath"] = p.TotalPagesPath
 		opts["startPage"] = 1
 		opts["pageSize"] = p.PageSize
-
 	case config.PaginationTypeOffset:
 		opts["offsetParam"] = p.OffsetParam
 		opts["sizeParam"] = p.LimitParam
@@ -118,54 +191,42 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 		opts["totalCountPath"] = p.TotalCountPath
 		opts["initOffset"] = 0
 		opts["pageSize"] = p.OffsetIncrement
-
 	case config.PaginationTypeCursor:
 		opts["cursorParam"] = p.CursorParam
 		opts["nextPath"] = p.CursorPath
-
-	case config.PaginationTypeLink:
-		// no extra options
-	default:
-		return nil, fmt.Errorf("unsupported pagination type: %s", p.Type)
 	}
 
-	return c.factory.CreatePager(string(p.Type), c.httpClient, baseReq.Clone(baseReq.Context()), opts)
+	return opts
 }
 
-// createBaseRequest builds the HTTP request from config Source settings.
-func (c *Connector) createBaseRequest(ctx context.Context) (*http.Request, error) {
-	method := c.config.Source.Method
-	if method == "" {
-		method = http.MethodGet
+// handleResponse processes a single HTTP response
+func (c *Connector) handleResponse(resp *http.Response) ([]map[string]interface{}, error) {
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL, nil)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors2.WrapError(err, errors2.ErrHTTPRequest, "failed to create HTTP request")
+		return nil, errors.WrapError(err, errors.ErrHTTPResponse, "failed to read response body")
 	}
 
-	for k, v := range c.headers {
-		req.Header.Set(k, v)
+	items, err := c.processResponseFromBytes(resp.StatusCode, bodyBytes)
+	if err != nil {
+		return nil, err
 	}
 
-	if c.config.Source.QueryParams != nil {
-		q := req.URL.Query()
-		for k, v := range c.config.Source.QueryParams {
-			q.Set(k, v)
-		}
-		req.URL.RawQuery = q.Encode()
-	}
-
-	return req, nil
+	return c.extractFields(items)
 }
 
 // handleAuthError wraps authentication errors appropriately.
 func (c *Connector) handleAuthError(err error) error {
 	var tr *auth.TokenRefreshError
 	if errors.As(err, &tr) {
-		return errors2.WrapError(err, errors2.ErrTokenExpired, "token refresh failed")
+		return errors.WrapError(err, errors.ErrTokenExpired, "token refresh failed")
 	}
-	return errors2.WrapError(err, errors2.ErrAuthentication, "authentication failed")
+	return errors.WrapError(err, errors.ErrAuthentication, "authentication failed")
 }
 
 // readResponseBody safely reads and closes the response body
@@ -174,7 +235,7 @@ func (c *Connector) readResponseBody(resp *http.Response) ([]byte, error) {
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors2.WrapError(err, errors2.ErrHTTPResponse, "failed to read response body")
+		return nil, errors.WrapError(err, errors.ErrHTTPResponse, "failed to read response body")
 	}
 
 	return bodyBytes, nil
@@ -200,40 +261,16 @@ func (c *Connector) createBufferedResponse(originalResp *http.Response, bodyByte
 	}
 }
 
-// processResponse handles response for single requests (no pagination)
-func (c *Connector) processResponse(resp *http.Response) ([]interface{}, error) {
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors2.WrapError(
-			fmt.Errorf("API returned status %d", resp.StatusCode),
-			errors2.ErrHTTPResponse,
-			"unexpected status code",
-		)
-	}
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors2.WrapError(err, errors2.ErrHTTPResponse, "failed to read response body")
-	}
-
-	return c.processResponseFromBytes(resp.StatusCode, bodyBytes)
-}
-
-// processResponseFromBytes processes response from pre-read body bytes (for pagination)
+// processResponseFromBytes processes response from pre-read body bytes
 func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) ([]interface{}, error) {
 	if statusCode != http.StatusOK {
-		return nil, errors2.WrapError(
-			fmt.Errorf("API returned status %d", statusCode),
-			errors2.ErrHTTPResponse,
-			"unexpected status code",
-		)
+		return nil, fmt.Errorf("API returned status %d", statusCode)
 	}
 
 	// Try to detect if response is an array or object
 	var responseData interface{}
 	if err := json.Unmarshal(bodyBytes, &responseData); err != nil {
-		return nil, errors2.WrapError(err, errors2.ErrHTTPResponse, "failed to decode response JSON")
+		return nil, errors.WrapError(err, errors.ErrHTTPResponse, "failed to decode response JSON")
 	}
 
 	// Handle null response
@@ -246,22 +283,17 @@ func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) (
 		return arr, nil
 	}
 
-	// Handle object with nested arrays (your existing logic)
+	// Handle object with nested arrays
 	if objMap, ok := responseData.(map[string]interface{}); ok {
 		return c.extractItems(objMap)
 	}
 
-	return nil, errors2.WrapError(
-		fmt.Errorf("unexpected response format: %T", responseData),
-		errors2.ErrHTTPResponse,
-		"invalid response structure",
-	)
+	return nil, fmt.Errorf("unexpected response format: %T", responseData)
 }
 
-// extractItems pulls out the slice of items from the response JSON,
-// using ResponseMapping.RootPath or default "items"/"data" keys.
+// extractItems pulls out the slice of items from the response JSON
 func (c *Connector) extractItems(responseData map[string]interface{}) ([]interface{}, error) {
-	rp := c.config.Source.ResponseMapping.RootPath
+	rp := c.cfg.Source.ResponseMapping.RootPath
 	if rp == "" {
 		if items, ok := responseData["items"].([]interface{}); ok {
 			return items, nil
@@ -274,20 +306,12 @@ func (c *Connector) extractItems(responseData map[string]interface{}) ([]interfa
 
 	root, ok := ExtractField(responseData, rp)
 	if !ok {
-		return nil, errors2.WrapError(
-			fmt.Errorf("root path '%s' not found", rp),
-			errors2.ErrExtraction,
-			"missing root path",
-		)
+		return nil, fmt.Errorf("root path '%s' not found", rp)
 	}
 
 	items, ok := root.([]interface{})
 	if !ok {
-		return nil, errors2.WrapError(
-			fmt.Errorf("root path '%s' is not an array", rp),
-			errors2.ErrExtraction,
-			"invalid root path data type",
-		)
+		return nil, fmt.Errorf("root path '%s' is not an array", rp)
 	}
 
 	return items, nil
@@ -300,15 +324,11 @@ func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}
 	for i, item := range items {
 		itemMap, ok := item.(map[string]interface{})
 		if !ok {
-			return nil, errors2.WrapError(
-				fmt.Errorf("item at index %d is not a map: %v", i, item),
-				errors2.ErrExtraction,
-				"invalid item data type",
-			)
+			return nil, fmt.Errorf("item at index %d is not a map: %v", i, item)
 		}
 
 		mapped := make(map[string]interface{})
-		for _, field := range c.config.Source.ResponseMapping.Fields {
+		for _, field := range c.cfg.Source.ResponseMapping.Fields {
 			value, ok := ExtractField(itemMap, field.Path)
 
 			// Check if field is missing OR null
@@ -326,4 +346,35 @@ func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}
 	}
 
 	return results, nil
+}
+
+// ExtractField extracts a field from a map using a dotted path
+func ExtractField(data map[string]interface{}, path string) (interface{}, bool) {
+	if path == "" {
+		return nil, false
+	}
+
+	// Simple case - no dots
+	if !strings.Contains(path, ".") {
+		value, ok := data[path]
+		return value, ok
+	}
+
+	// Nested case - traverse the path
+	parts := strings.Split(path, ".")
+	var current interface{} = data
+
+	for _, part := range parts {
+		currentMap, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+
+		current, ok = currentMap[part]
+		if !ok {
+			return nil, false
+		}
+	}
+
+	return current, true
 }
