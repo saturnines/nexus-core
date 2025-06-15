@@ -1,196 +1,96 @@
-package api
+package core
 
-// This connector.go I'm not proud of, it's a bit messy.
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
-	"Nexus/pkg/config"
-	"Nexus/pkg/connector/api/auth"
-	"Nexus/pkg/connector/api/pagination"
-	errors2 "Nexus/pkg/errors"
+	"nexus-core/pkg/auth"
+	"nexus-core/pkg/config"
+	"nexus-core/pkg/errors"
+	"nexus-core/pkg/pagination"
+	"nexus-core/pkg/transport/rest"
 )
 
-// ConnectorOption allows customizing Connector (e.g. HTTP client or pagination factory).
-type ConnectorOption func(*Connector)
-
-// Connector is the main API client. It should handle auth, pagination, request building, and field extraction.
+// Connector orchestrates requests, pagination and handling.
 type Connector struct {
-	httpClient  HTTPDoer
-	baseURL     string
-	headers     map[string]string
-	config      *config.Pipeline
-	authHandler auth.Handler
-	factory     *pagination.Factory
+	builder RequestBuilder
+	pager   pagination.Pager
+	client  *http.Client
+	cfg     *config.Pipeline
 }
 
-// NewConnector builds a Connector from cfg. It applies any opts before returning.
-// Only REST-type sources are supported.
-func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, error) {
-	if cfg.Source.Type != config.SourceTypeREST {
-		return nil, errors2.WrapError(
-			fmt.Errorf("unsupported source type: %s", cfg.Source.Type),
-			errors2.ErrConfiguration,
-			"invalid source type",
-		)
-	}
-
-	c := &Connector{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		baseURL:    cfg.Source.Endpoint,
-		headers:    make(map[string]string),
-		config:     cfg,
-		factory:    pagination.DefaultFactory,
-	}
-
-	if cfg.Source.Headers != nil {
-		for k, v := range cfg.Source.Headers {
-			c.headers[k] = v
-		}
-	}
-
-	for _, o := range opts {
-		o(c)
-	}
-
-	if cfg.Source.Auth != nil {
-		h, err := auth.CreateHandler(cfg.Source.Auth)
-		if err != nil {
-			return nil, errors2.WrapError(err, errors2.ErrConfiguration, "failed to configure authentication")
-		}
-
-		// If it's OAuth2, wrap the HTTP client with OAuth2RoundTripper
-		if cfg.Source.Auth.Type == config.AuthTypeOAuth2 {
-			if oauth2Auth, ok := h.(*auth.OAuth2Auth); ok {
-				// Wrap the existing HTTP client's transport
-				if httpClient, ok := c.httpClient.(*http.Client); ok {
-					httpClient.Transport = auth.NewOAuth2RoundTripper(httpClient.Transport, oauth2Auth)
-					// Don't set authHandler since RoundTripper handles OAuth2 automatically
-					c.authHandler = nil
-				}
-			} else {
-				return nil, errors2.WrapError(
-					fmt.Errorf("failed to cast OAuth2 handler"),
-					errors2.ErrConfiguration,
-					"OAuth2 handler configuration error",
-				)
-			}
-		} else {
-			// For non-OAuth2 auth, use the regular authHandler
-			c.authHandler = h
-		}
-	}
-	return c, nil
-}
-
-// WithConnectorHTTPOptions This isn't used.
-// WithConnectorHTTPOptions applies custom HTTP client options.
-func WithConnectorHTTPOptions(options ...HTTPClientOption) ConnectorOption {
-	return func(c *Connector) {
-		c.httpClient = ApplyHTTPClientOptions(c.httpClient, options...)
-	}
-}
-
-// This isn't used.
-// WithPaginationFactory allows supplying a custom pagination.Factory.
-func WithPaginationFactory(f *pagination.Factory) ConnectorOption {
-	return func(c *Connector) {
-		c.factory = f
-	}
-}
-
-// Extract runs the extraction loop. It builds the base request, applies auth,
-// pages (if configured), decodes JSON, extracts fields, and returns a slice of maps.
-func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, error) {
-	var allResults []map[string]interface{}
-
-	// If no pagination configured: single-request path
-	if c.config.Pagination == nil {
-		req, err := c.createBaseRequest(ctx)
-		if err != nil {
-			return nil, errors2.WrapError(err, errors2.ErrHTTPRequest, "failed to create request")
-		}
-
-		if c.authHandler != nil {
-			if err := c.authHandler.ApplyAuth(req); err != nil {
-				return nil, c.handleAuthError(err)
-			}
-		}
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return nil, errors2.WrapError(err, errors2.ErrHTTPRequest, "request failed")
-		}
-
-		items, err := c.processResponse(resp)
-		if err != nil {
-			return nil, err
-		}
-
-		return c.extractFields(items)
-	}
-
-	// Pagination path
-	pager, err := c.createPager(ctx)
+// NewConnector picks a Builder and a Pager based on cfg.
+func NewConnector(cfg *config.Pipeline) (*Connector, error) {
+	h, err := auth.CreateHandler(cfg.Source.Auth)
 	if err != nil {
-		return nil, errors2.WrapError(err, errors2.ErrPagination, "failed to create pager")
+		return nil, errors.Wrap(err, "auth handler")
+	}
+
+	var builder RequestBuilder
+	var pager pagination.Pager
+
+	switch cfg.Source.Type {
+	case config.SourceTypeREST:
+		builder = rest.NewBuilder(
+			cfg.Source.Endpoint,
+			cfg.Source.Method,
+			cfg.Source.Headers,
+			cfg.Source.QueryParams,
+			h,
+		)
+		pager = pagination.DefaultFactory.New(cfg.Source.Paging.Type)
+	default:
+		return nil, fmt.Errorf("unsupported source type: %s", cfg.Source.Type)
+	}
+
+	return &Connector{
+		builder: builder,
+		pager:   pager,
+		client:  &http.Client{Timeout: 30 * time.Second},
+		cfg:     cfg,
+	}, nil
+}
+
+// Extract runs the loop: build → send → handle → page.
+func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, error) {
+	var all []map[string]interface{}
+
+	req, err := c.builder.Build(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "build request")
 	}
 
 	for {
-		req, err := pager.NextRequest()
+		resp, err := c.client.Do(req)
 		if err != nil {
-			return nil, errors2.WrapError(err, errors2.ErrPagination, "failed to get next request")
+			return nil, errors.Wrap(err, "http do")
 		}
-		if req == nil {
+
+		batch, err := c.handleResponse(resp)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+
+		if !c.pager.HasNext() {
 			break
 		}
-
-		if c.authHandler != nil {
-			if err := c.authHandler.ApplyAuth(req); err != nil {
-				return nil, c.handleAuthError(err)
-			}
+		if err := c.pager.Update(resp); err != nil {
+			return nil, errors.Wrap(err, "paginate")
 		}
 
-		resp, err := c.httpClient.Do(req)
+		req, err = c.builder.Build(ctx)
 		if err != nil {
-			return nil, errors2.WrapError(err, errors2.ErrHTTPRequest, "request failed")
+			return nil, errors.Wrap(err, "build next request")
 		}
-
-		// Read body once to avoid consumption conflicts
-		bodyBytes, err := c.readResponseBody(resp)
-		if err != nil {
-			return nil, err
-		}
-
-		// Create buffered response for pager (so it can read the body)
-		bufferedResp := c.createBufferedResponse(resp, bodyBytes)
-
-		// Update pager state using buffered response
-		if err := pager.UpdateState(bufferedResp); err != nil {
-			return nil, errors2.WrapError(err, errors2.ErrPagination, "failed to update pager state")
-		}
-
-		// Process the same body data for item extraction
-		items, err := c.processResponseFromBytes(resp.StatusCode, bodyBytes)
-		if err != nil {
-			return nil, err
-		}
-
-		pageResults, err := c.extractFields(items)
-		if err != nil {
-			return nil, errors2.WrapError(err, errors2.ErrExtraction, "failed to extract fields")
-		}
-
-		allResults = append(allResults, pageResults...)
 	}
 
-	return allResults, nil
+	return all, nil
 }
 
 // createPager uses the pagination.Factory to build a Pager based on config.
