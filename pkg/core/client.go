@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/transport/rest"
 	"io"
 	"net/http"
 	"strings"
@@ -12,7 +13,7 @@ import (
 
 // APIClient struct
 type APIClient struct {
-	httpClient HTTPDoer
+	httpClient rest.HTTPDoer
 	baseURL    string
 	headers    map[string]string
 	rateLimit  int
@@ -39,9 +40,9 @@ func NewClient(baseURL string, options ...ClientOption) *APIClient {
 	return client
 }
 
-func WithClientHTTPOptions(options ...HTTPClientOption) ClientOption {
+func WithClientHTTPOptions(options ...rest.HTTPClientOption) ClientOption {
 	return func(c *APIClient) {
-		c.httpClient = ApplyHTTPClientOptions(c.httpClient, options...)
+		c.httpClient = rest.ApplyHTTPClientOptions(c.httpClient, options...)
 	}
 }
 
@@ -65,7 +66,7 @@ func (c *APIClient) Post(ctx context.Context, endpoint string, body []byte) (*ht
 // Request performs an HTTP request with whatever method to the endpoint
 func (c *APIClient) Request(ctx context.Context, method, endpoint string, body []byte) (*http.Response, error) {
 	// Use the shared RequestHelper
-	return RequestHelper(ctx, c.httpClient, method, c.baseURL, endpoint, c.headers, body)
+	return rest.RequestHelper(ctx, c.httpClient, method, c.baseURL, endpoint, c.headers, body)
 }
 
 // ExtractJSON extracts JSON data from an HTTP response into the provided target
