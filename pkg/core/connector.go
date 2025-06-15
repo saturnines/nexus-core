@@ -63,7 +63,7 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 
 	conn := &Connector{
 		builder:     builder,
-		client:      &http.Client{Timeout: 30 * time.Second},
+		client:      httpClient,
 		cfg:         cfg,
 		authHandler: authHandler,
 		factory:     pagination.DefaultFactory,
@@ -211,7 +211,7 @@ func (c *Connector) handleResponse(resp *http.Response) ([]map[string]interface{
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+		return nil, errors.WrapError(fmt.Errorf("API returned status %d", resp.StatusCode), errors.ErrHTTPResponse, "unexpected status code")
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
@@ -271,7 +271,7 @@ func (c *Connector) createBufferedResponse(originalResp *http.Response, bodyByte
 // processResponseFromBytes processes response from pre-read body bytes
 func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) ([]interface{}, error) {
 	if statusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", statusCode)
+		return nil, errors.WrapError(fmt.Errorf("API returned status %d", statusCode), errors.ErrHTTPResponse, "unexpected status code")
 	}
 
 	// Try to detect if response is an array or object
@@ -392,9 +392,21 @@ func WithConnectorHTTPOptions(options ...rest.HTTPClientOption) ConnectorOption 
 		for _, option := range options {
 			doer = option(doer)
 		}
-
 		if client, ok := doer.(*http.Client); ok {
 			c.client = client
 		}
+	}
+}
+
+func WithTimeout(timeout time.Duration) ConnectorOption {
+	return func(c *Connector) {
+		c.client.Timeout = timeout
+	}
+}
+
+// WithCustomHTTPClient replaces the connector's HTTP client entirely
+func WithCustomHTTPClient(client *http.Client) ConnectorOption {
+	return func(c *Connector) {
+		c.client = client
 	}
 }
