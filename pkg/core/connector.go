@@ -35,16 +35,28 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 		return nil, fmt.Errorf("unsupported source type: %s", cfg.Source.Type)
 	}
 
+	// Start with base transport
+	transport := http.DefaultTransport
+
+	// Layer 1: Add retry transport if configured
+	if cfg.RetryConfig != nil {
+		transport = NewRetryTransport(transport, cfg.RetryConfig)
+	}
+
 	// Auth handler
 	var authHandler auth.Handler
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	httpClient := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+
 	if cfg.Source.Auth != nil {
 		h, err := auth.CreateHandler(cfg.Source.Auth)
 		if err != nil {
 			return nil, errors.WrapError(err, errors.ErrAuthentication, "auth handler")
 		}
 
-		// Handle OAuth2 differently - use RoundTripper instead of ApplyAuth
+		// Layer 2: Handle OAuth2 differently - use RoundTripper instead of ApplyAuth
 		if oauth2Auth, ok := h.(*auth.OAuth2Auth); ok {
 			httpClient.Transport = auth.NewOAuth2RoundTripper(httpClient.Transport, oauth2Auth)
 			authHandler = nil // Don't use ApplyAuth for OAuth2
@@ -52,6 +64,7 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 			authHandler = h // Use ApplyAuth for other auth types
 		}
 	}
+
 	// Request builder
 	builder := rest.NewBuilder(
 		cfg.Source.Endpoint,
