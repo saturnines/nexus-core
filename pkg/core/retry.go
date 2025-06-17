@@ -61,6 +61,7 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	for attempt := 0; attempt < t.Cfg.MaxAttempts; attempt++ {
 		// Clone request for safe keeping
+		// A lazy way in theory could be just clone if body of http request is "small"
 		req2 := t.cloneRequest(req)
 
 		resp, err := t.Base.RoundTrip(req2)
