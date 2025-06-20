@@ -1,0 +1,28 @@
+name: stripe-customers-simple
+source:
+  type: rest
+  endpoint: https://api.stripe.com/v1/customers
+  auth:
+    type: bearer
+    bearer:
+      token: ${STRIPE_SECRET_KEY}
+  response_mapping:
+    root_path: data
+    fields:
+      - name: id
+        path: id
+      - name: email
+        path: email
+      - name: name
+        path: name
+      - name: created
+        path: created
+      - name: currency
+        path: currency
+      - name: balance
+        path: balance
+pagination:
+  type: cursor
+  cursor_param: starting_after
+  cursor_path: data.-1.id
+  has_more_path: has_more
