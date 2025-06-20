@@ -1,0 +1,38 @@
+# Extract Shopify products
+name: shopify-products
+source:
+  type: rest
+  endpoint: https://nexus-test123.myshopify.com/admin/api/2024-01/products.json # just point your own endpoint
+  auth:
+    type: api_key
+    api_key:
+      header: X-Shopify-Access-Token
+      value: ${SHOPIFY_TOKEN}
+  response_mapping:
+    root_path: products
+    fields:
+      - name: id
+        path: id
+      - name: title
+        path: title
+      - name: handle
+        path: handle
+      - name: vendor
+        path: vendor
+      - name: product_type
+        path: product_type
+      - name: created_at
+        path: created_at
+      - name: updated_at
+        path: updated_at
+      - name: status
+        path: status
+      - name: first_variant_price
+        path: variants[0].price
+      - name: first_variant_sku
+        path: variants[0].sku
+      - name: image_url
+        path: image_url.src
+pagination:
+  type: link
+  link_header: true
