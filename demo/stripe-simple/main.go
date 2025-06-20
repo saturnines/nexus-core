@@ -38,9 +38,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("✅ Extracted %d customers\n", len(results))
+	fmt.Printf("Extracted %d customers\n", len(results))
 
-	// That's it. The data is ready to use.
+	// That's it.
 	for _, customer := range results[:3] {
 		fmt.Printf("Customer: %v (%v)\n", customer["name"], customer["email"])
 	}
