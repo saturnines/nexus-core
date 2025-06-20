@@ -1,0 +1,218 @@
+name: stripe-customers-pipeline
+description: Extract Stripe customers with payment methods, billing details, and metadata
+version: 1.0
+
+source:
+  type: rest
+  endpoint: https://api.stripe.com/v1/customers
+  method: GET
+  headers:
+    Content-Type: application/x-www-form-urlencoded
+  query_params:
+    limit: "100"  # Stripe's max per page
+    expand[0]: "data.default_source"
+    expand[1]: "data.sources"
+    expand[2]: "data.subscriptions"
+  auth:
+    type: bearer
+    bearer:
+      token: ${STRIPE_SECRET_KEY}
+  response_mapping:
+    root_path: data  # Stripe wraps results in "data" array
+    fields:
+      # Basic customer info
+      - name: id
+        path: id
+        type: string
+      - name: object
+        path: object
+        type: string
+      - name: created
+        path: created
+        type: integer
+      - name: email
+        path: email
+        type: string
+        default_value: ""
+      - name: name
+        path: name
+        type: string
+        default_value: ""
+      - name: phone
+        path: phone
+        type: string
+        default_value: ""
+      - name: description
+        path: description
+        type: string
+        default_value: ""
+
+      # Financial data
+      - name: balance
+        path: balance
+        type: integer
+        default_value: 0
+      - name: currency
+        path: currency
+        type: string
+        default_value: "usd"
+      - name: delinquent
+        path: delinquent
+        type: boolean
+        default_value: false
+
+      # Address info (deeply nested)
+      - name: address_line1
+        path: address.line1
+        type: string
+        default_value: ""
+      - name: address_line2
+        path: address.line2
+        type: string
+        default_value: ""
+      - name: address_city
+        path: address.city
+        type: string
+        default_value: ""
+      - name: address_state
+        path: address.state
+        type: string
+        default_value: ""
+      - name: address_postal_code
+        path: address.postal_code
+        type: string
+        default_value: ""
+      - name: address_country
+        path: address.country
+        type: string
+        default_value: ""
+
+      # Shipping address (separate from billing)
+      - name: shipping_name
+        path: shipping.name
+        type: string
+        default_value: ""
+      - name: shipping_address_line1
+        path: shipping.address.line1
+        type: string
+        default_value: ""
+      - name: shipping_address_city
+        path: shipping.address.city
+        type: string
+        default_value: ""
+      - name: shipping_address_state
+        path: shipping.address.state
+        type: string
+        default_value: ""
+      - name: shipping_address_postal_code
+        path: shipping.address.postal_code
+        type: string
+        default_value: ""
+      - name: shipping_address_country
+        path: shipping.address.country
+        type: string
+        default_value: ""
+
+      # Default payment source (complex nested object)
+      - name: default_source_id
+        path: default_source.id
+        type: string
+        default_value: ""
+      - name: default_source_object
+        path: default_source.object
+        type: string
+        default_value: ""
+      - name: default_source_brand
+        path: default_source.brand
+        type: string
+        default_value: ""
+      - name: default_source_last4
+        path: default_source.last4
+        type: string
+        default_value: ""
+      - name: default_source_exp_month
+        path: default_source.exp_month
+        type: integer
+        default_value: null
+      - name: default_source_exp_year
+        path: default_source.exp_year
+        type: integer
+        default_value: null
+      - name: default_source_funding
+        path: default_source.funding
+        type: string
+        default_value: ""
+      - name: default_source_country
+        path: default_source.country
+        type: string
+        default_value: ""
+
+      # Subscriptions count and first subscription info
+      - name: subscriptions_total_count
+        path: subscriptions.total_count
+        type: integer
+        default_value: 0
+      - name: first_subscription_id
+        path: subscriptions.data.0.id
+        type: string
+        default_value: ""
+      - name: first_subscription_status
+        path: subscriptions.data.0.status
+        type: string
+        default_value: ""
+      - name: first_subscription_period_start
+        path: subscriptions.data.0.current_period_start
+        type: integer
+        default_value: null
+      - name: first_subscription_period_end
+        path: subscriptions.data.0.current_period_end
+        type: integer
+        default_value: null
+
+      # Sources/payment methods count
+      - name: sources_total_count
+        path: sources.total_count
+        type: integer
+        default_value: 0
+
+      # Metadata (custom fields)
+      - name: metadata_customer_type
+        path: metadata.customer_type
+        type: string
+        default_value: ""
+      - name: metadata_acquisition_source
+        path: metadata.acquisition_source
+        type: string
+        default_value: ""
+
+      # Account status
+      - name: livemode
+        path: livemode
+        type: boolean
+        default_value: false
+      - name: discount_coupon_id
+        path: discount.coupon.id
+        type: string
+        default_value: ""
+      - name: discount_start
+        path: discount.start
+        type: integer
+        default_value: null
+      - name: discount_end
+        path: discount.end
+        type: integer
+        default_value: null
+
+# Stripe uses cursor pagination with starting_after
+pagination:
+  type: cursor
+  cursor_param: starting_after
+  cursor_path: data.-1.id  # Get the ID of the last item for next page
+  has_more_path: has_more
+
+# Stripe rate limiting: quite generous but can be strict on some endpoints
+retry_config:
+  max_attempts: 3
+  initial_backoff: 1
+  backoff_multiplier: 2.0
+  retryable_statuses: [429, 500, 502, 503, 504]
