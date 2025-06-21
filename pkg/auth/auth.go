@@ -5,12 +5,6 @@ import (
 	"net/http"
 )
 
-var (
-	ErrInvalidCredentials = fmt.Errorf("invalid credentials")
-	ErrTokenRefresh       = fmt.Errorf("token refresh failed")
-	ErrMissingCredentials = fmt.Errorf("missing credentials")
-)
-
 // Handler defines the interface for auth handlers
 type Handler interface {
 	ApplyAuth(req *http.Request) error
