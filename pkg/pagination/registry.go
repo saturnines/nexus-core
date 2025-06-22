@@ -27,7 +27,14 @@ func cursorCreator(c HTTPDoer, r *http.Request, opts map[string]interface{}) (Pa
 	if err != nil {
 		return nil, err
 	}
-	return NewCursorPager(c, r, cp, np), nil
+
+	// Use the thread-safe version now
+	pager, err := NewThreadSafeCursorPager(c, r, cp, np)
+	if err != nil {
+		return nil, errors.WrapError(err, errors.ErrConfiguration, "create cursor pager")
+	}
+
+	return pager, nil
 }
 
 func pageCreator(c HTTPDoer, r *http.Request, opts map[string]interface{}) (Pager, error) {
