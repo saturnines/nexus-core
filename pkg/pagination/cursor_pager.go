@@ -3,56 +3,59 @@ package pagination
 import (
 	"fmt"
 	"net/http"
+	"sync"
 )
 
-// CursorPager handles cursor based pagination.
-type CursorPager struct {
-	Client      HTTPDoer
-	BaseReq     *http.Request
-	CursorParam string
-	NextPath    string
+// ThreadSafeCursorPager handles cursor pagination
+// This implementation is/should thread safe?
+type ThreadSafeCursorPager struct {
+	// Immutable configuration (no mutex needed)
+	client      HTTPDoer
+	baseReq     *http.Request
+	cursorParam string
+	nextPath    string
 
+	// Mutable state (protected by mutex)
+	mu         sync.RWMutex
 	nextCursor string
+	hasMore    bool
 	first      bool
 }
 
-// NewCursorPager builds a CursorPager. nextPath must be a non empty JSON path
-// If nextPath is empty, no pagination will occur and it should stop.
-func NewCursorPager(client HTTPDoer, req *http.Request, cursorParam, nextPath string) *CursorPager {
+// NewThreadSafeCursorPager creates a cursor pager.
+// Returns error if nextPath is empty.
+func NewThreadSafeCursorPager(client HTTPDoer, req *http.Request, cursorParam, nextPath string) (*ThreadSafeCursorPager, error) {
 	if nextPath == "" {
-		return &CursorPager{
-			Client:      client,
-			BaseReq:     req,
-			CursorParam: cursorParam,
-			NextPath:    nextPath,
-			nextCursor:  "",
-			first:       false, // so NextRequest() sees nextCursor=="" and returns nil
-		}
+		return nil, fmt.Errorf("nextPath cannot be empty")
 	}
 
-	return &CursorPager{
-		Client:      client,
-		BaseReq:     req,
-		CursorParam: cursorParam,
-		NextPath:    nextPath,
+	return &ThreadSafeCursorPager{
+		client:      client,
+		baseReq:     req,
+		cursorParam: cursorParam,
+		nextPath:    nextPath,
+		hasMore:     true,
 		first:       true,
-	}
+	}, nil
 }
 
-// NextRequest returns the next *http.Request, or nil when there are no more pages.
-func (p *CursorPager) NextRequest() (*http.Request, error) {
-	// If this is not the first call, and nextCursor is empty, we’re done.
-	if !p.first && p.nextCursor == "" {
+// NextRequest returns the next HTTP request, or nil when there are no more pages.
+func (p *ThreadSafeCursorPager) NextRequest() (*http.Request, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Check if pagination is complete
+	if !p.first && !p.hasMore {
 		return nil, nil
 	}
 
-	// Build a fresh request cloning headers and context.
-	req := p.BaseReq.Clone(p.BaseReq.Context())
+	// Build the request
+	req := p.baseReq.Clone(p.baseReq.Context())
 
-	// On the second+ call, add ?cursor=<nextCursor> to the query.
-	if !p.first {
+	// Add cursor parameter for subsequent requests
+	if !p.first && p.nextCursor != "" {
 		q := req.URL.Query()
-		q.Set(p.CursorParam, p.nextCursor)
+		q.Set(p.cursorParam, p.nextCursor)
 		req.URL.RawQuery = q.Encode()
 	}
 
@@ -60,35 +63,69 @@ func (p *CursorPager) NextRequest() (*http.Request, error) {
 	return req, nil
 }
 
-// UpdateState reads the JSON response, looks up the next cursor, and stores it.
-// If the JSON field at NextPath is missing, null, or empty, p.nextCursor == "" and pagination should stop.
-func (p *CursorPager) UpdateState(resp *http.Response) error {
-	//  Fail on HTTP errors.
+// UpdateState processes response and updates pagination state.
+func (p *ThreadSafeCursorPager) UpdateState(resp *http.Response) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Validate response
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("CursorPager: unexpected status %d", resp.StatusCode)
+		return fmt.Errorf("cursor pagination failed: HTTP %d", resp.StatusCode)
 	}
 
-	// Parse the JSON body into a map[string]interface{}.
+	// Parse response body
 	body, err := parseBody(resp)
 	if err != nil {
-		return err
+		return fmt.Errorf("cursor pagination: failed to parse response: %w", err)
 	}
 
-	// Try to read a string from NextPath.
-	cur, err := lookupString(body, p.NextPath)
-	if err != nil {
-		// If lookupString signals “missing field” or returns an empty string,
-		// mark that the end of pagination and stop.
-		p.nextCursor = ""
-		return nil
-	}
+	// Extract next cursor value
+	nextCursorValue, err := lookupString(body, p.nextPath)
 
-	// End if we get empty str
-	if cur == "" {
+	// Update pagination state based on next cursor
+	if err != nil || nextCursorValue == "" {
+		// Field missing or empty - no more pages
 		p.nextCursor = ""
+		p.hasMore = false
 	} else {
-		p.nextCursor = cur
+		// Valid next cursor - continue pagination
+		p.nextCursor = nextCursorValue
+		p.hasMore = true
 	}
 
 	return nil
+}
+
+// HasMore returns whether more pages are available.
+func (p *ThreadSafeCursorPager) HasMore() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.hasMore
+}
+
+// GetNextCursor returns the next cursor value.
+func (p *ThreadSafeCursorPager) GetNextCursor() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.nextCursor
+}
+
+// Reset resets pagination to start from the beginning.
+func (p *ThreadSafeCursorPager) Reset() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.nextCursor = ""
+	p.hasMore = true
+	p.first = true
+}
+
+// ResumePagination resumes from a specific cursor.
+func (p *ThreadSafeCursorPager) ResumePagination(cursor string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.nextCursor = cursor
+	p.hasMore = true
+	p.first = false
 }
