@@ -3,6 +3,7 @@ package pagination
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -37,6 +38,69 @@ func NewThreadSafeCursorPager(client HTTPDoer, req *http.Request, cursorParam, n
 		hasMore:     true,
 		first:       true,
 	}, nil
+}
+
+// ExtractNestedValue extracts a value from nested data using a path like "data.-1.id"
+func ExtractNestedValue(data interface{}, path string) (interface{}, error) {
+	parts := strings.Split(path, ".")
+	current := data
+
+	for i, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			// case check if this is the last part and the next part is an array index
+			if i < len(parts)-2 && (parts[i+1] == "-1" || isNumeric(parts[i+1])) {
+				// Get the array from the current map
+				if arr, ok := v[part].([]interface{}); ok {
+					current = arr
+					continue
+				}
+			}
+
+			// Normal map access
+			val, ok := v[part]
+			if !ok {
+				return nil, fmt.Errorf("key %q not found", part)
+			}
+			current = val
+
+		case []interface{}:
+			// Handle array indexing
+			if part == "-1" {
+				// Get last element
+				if len(v) == 0 {
+					return nil, fmt.Errorf("cannot get last element of empty array")
+				}
+				current = v[len(v)-1]
+			} else if idx, err := parseInt(part); err == nil {
+				// Numeric index
+				if idx < 0 || idx >= len(v) {
+					return nil, fmt.Errorf("array index %d out of bounds", idx)
+				}
+				current = v[idx]
+			} else {
+				return nil, fmt.Errorf("invalid array index: %s", part)
+			}
+
+		default:
+			return nil, fmt.Errorf("cannot traverse %T with key %q", current, part)
+		}
+	}
+
+	return current, nil
+}
+
+// Helper to check if string is numeric
+func isNumeric(s string) bool {
+	_, err := parseInt(s)
+	return err == nil
+}
+
+// Helper to parse int
+func parseInt(s string) (int, error) {
+	var n int
+	_, err := fmt.Sscanf(s, "%d", &n)
+	return n, err
 }
 
 // NextRequest returns the next HTTP request, or nil when there are no more pages.
@@ -79,18 +143,24 @@ func (p *ThreadSafeCursorPager) UpdateState(resp *http.Response) error {
 		return fmt.Errorf("cursor pagination: failed to parse response: %w", err)
 	}
 
-	// Extract next cursor value
-	nextCursorValue, err := lookupString(body, p.nextPath)
+	// Extract next cursor value using our enhanced extraction
+	nextCursorValue, err := ExtractNestedValue(body, p.nextPath)
 
 	// Update pagination state based on next cursor
-	if err != nil || nextCursorValue == "" {
+	if err != nil || nextCursorValue == nil {
 		// Field missing or empty - no more pages
 		p.nextCursor = ""
 		p.hasMore = false
 	} else {
-		// Valid next cursor - continue pagination
-		p.nextCursor = nextCursorValue
-		p.hasMore = true
+		// Convert to string
+		if strVal, ok := nextCursorValue.(string); ok {
+			p.nextCursor = strVal
+			p.hasMore = true
+		} else {
+			// Try to convert to string
+			p.nextCursor = fmt.Sprintf("%v", nextCursorValue)
+			p.hasMore = true
+		}
 	}
 
 	return nil
