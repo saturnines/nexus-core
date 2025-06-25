@@ -194,11 +194,26 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 		return nil, nil
 	}
 
+	//GraphQL path
+	if c.cfg.Source.Type == config.SourceTypeGraphQL {
+		// we know builder is *graphql.Builder
+		b := c.builder.(*graphql.Builder)
+		// wrap HTTP client in a GraphQL client
+		gcli := graphql.NewClient(c.client)
+
+		// grab the pagination settings
+		p := c.cfg.Source.GraphQLConfig.Pagination
+		nextPath := strings.Split(p.CursorPath, ".")
+		hasNextPath := strings.Split(p.HasMorePath, ".")
+
+		return graphql.NewPager(ctx, b, gcli, p.CursorParam, nextPath, hasNextPath)
+	}
+
+	// ── REST path via factory ─────────────────────────────
 	req, err := c.builder.Build(ctx)
 	if err != nil {
 		return nil, err
 	}
-
 	opts := c.paginationConfigToPagerOptions()
 	return c.factory.CreatePager(
 		string(c.cfg.Pagination.Type),
