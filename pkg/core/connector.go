@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/transport/graphql"
 	"io"
 	"net/http"
 	"strings"
@@ -31,48 +32,64 @@ type ConnectorOption func(*Connector)
 
 // NewConnector creates a connector based on config
 func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, error) {
-	if cfg.Source.Type != config.SourceTypeREST {
-		return nil, fmt.Errorf("unsupported source type: %s", cfg.Source.Type)
-	}
+	var (
+		transport   = http.DefaultTransport
+		authHandler auth.Handler
+	)
 
-	// Start with base transport
-	transport := http.DefaultTransport
-
-	// Layer 1: Add retry transport if configured
+	// retry layer
 	if cfg.RetryConfig != nil {
 		transport = NewRetryTransport(transport, cfg.RetryConfig)
 	}
 
-	// Auth handler
-	var authHandler auth.Handler
 	httpClient := &http.Client{
 		Transport: transport,
 		Timeout:   30 * time.Second,
 	}
 
+	// if auth configured, build handler and maybe wrap transport
 	if cfg.Source.Auth != nil {
 		h, err := auth.CreateHandler(cfg.Source.Auth)
 		if err != nil {
 			return nil, errors.WrapError(err, errors.ErrAuthentication, "auth handler")
 		}
-
-		// Layer 2: Handle OAuth2 differently - use RoundTripper instead of ApplyAuth
 		if oauth2Auth, ok := h.(*auth.OAuth2Auth); ok {
 			httpClient.Transport = auth.NewOAuth2RoundTripper(httpClient.Transport, oauth2Auth)
-			authHandler = nil // Don't use ApplyAuth for OAuth2
+			authHandler = nil
 		} else {
-			authHandler = h // Use ApplyAuth for other auth types
+			authHandler = h
 		}
 	}
 
-	// Request builder
-	builder := rest.NewBuilder(
-		cfg.Source.Endpoint,
-		cfg.Source.Method,
-		cfg.Source.Headers,
-		cfg.Source.QueryParams,
-		authHandler,
-	)
+	var builder RequestBuilder
+
+	switch cfg.Source.Type {
+	case config.SourceTypeREST:
+		builder = rest.NewBuilder(
+			cfg.Source.Endpoint,
+			cfg.Source.Method,
+			cfg.Source.Headers,
+			cfg.Source.QueryParams,
+			authHandler,
+		)
+
+	case config.SourceTypeGraphQL:
+		// GraphQLConfig must be non-nil in your config types
+		g := cfg.Source.GraphQLConfig
+		if g == nil {
+			return nil, fmt.Errorf("graphql config missing")
+		}
+		builder = graphql.NewBuilder(
+			g.Endpoint,
+			g.Query,
+			g.Variables,
+			g.Headers,
+			authHandler,
+		)
+
+	default:
+		return nil, fmt.Errorf("unsupported source type: %s", cfg.Source.Type)
+	}
 
 	conn := &Connector{
 		builder:     builder,
