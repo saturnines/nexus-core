@@ -109,7 +109,7 @@ func (p *ThreadSafeCursorPager) NextRequest() (*http.Request, error) {
 	defer p.mu.Unlock()
 
 	// Check if pagination is complete
-	if !p.first && !p.hasMore {
+	if !p.hasMore {
 		return nil, nil
 	}
 
@@ -148,17 +148,25 @@ func (p *ThreadSafeCursorPager) UpdateState(resp *http.Response) error {
 
 	// Update pagination state based on next cursor
 	if err != nil || nextCursorValue == nil {
-		// Field missing or empty - no more pages
+		// Field missing or null - no more pages
 		p.nextCursor = ""
 		p.hasMore = false
 	} else {
-		// Convert to string
+		// Convert to string and check if it's empty
+		var cursorStr string
 		if strVal, ok := nextCursorValue.(string); ok {
-			p.nextCursor = strVal
-			p.hasMore = true
+			cursorStr = strVal
 		} else {
 			// Try to convert to string
-			p.nextCursor = fmt.Sprintf("%v", nextCursorValue)
+			cursorStr = fmt.Sprintf("%v", nextCursorValue)
+		}
+
+		// Check if cursor is empty string if so, no more pages
+		if cursorStr == "" {
+			p.nextCursor = ""
+			p.hasMore = false
+		} else {
+			p.nextCursor = cursorStr
 			p.hasMore = true
 		}
 	}
