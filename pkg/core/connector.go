@@ -319,6 +319,13 @@ func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) (
 		return nil, errors.WrapError(fmt.Errorf("API returned status %d", statusCode), errors.ErrHTTPResponse, "unexpected status code")
 	}
 
+	// Check for GraphQL errors if this is a GraphQL source
+	if c.cfg.Source.Type == config.SourceTypeGraphQL {
+		if err := errors.CheckGraphQLErrors(bodyBytes); err != nil {
+			return nil, err // Already wrapped by CheckGraphQLErrors
+		}
+	}
+
 	// Try to detect if response is an array or object
 	var responseData interface{}
 	if err := json.Unmarshal(bodyBytes, &responseData); err != nil {
@@ -328,6 +335,15 @@ func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) (
 	// Handle null response
 	if responseData == nil {
 		return []interface{}{}, nil
+	}
+
+	// For GraphQL, extract data field first
+	if c.cfg.Source.Type == config.SourceTypeGraphQL {
+		if objMap, ok := responseData.(map[string]interface{}); ok {
+			if data, exists := objMap["data"]; exists {
+				responseData = data
+			}
+		}
 	}
 
 	// Handle array at root level (like JSONPlaceholder)
