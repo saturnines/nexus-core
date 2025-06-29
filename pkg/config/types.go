@@ -15,6 +15,16 @@ type Pipeline struct {
 	References    map[string]interface{} `yaml:"references,omitempty"`     // Reusable configuration blocks
 }
 
+type GraphQLSource struct {
+	Endpoint        string                 `yaml:"endpoint"`
+	Query           string                 `yaml:"query"`
+	Variables       map[string]interface{} `yaml:"variables,omitempty"`
+	Headers         map[string]string      `yaml:"headers,omitempty"`
+	Auth            *Auth                  `yaml:"auth,omitempty"`
+	ResponseMapping ResponseMapping        `yaml:"response_mapping"`
+	Pagination      *Pagination            `yaml:"pagination,omitempty"`
+}
+
 // RetryConfig represents retry settings for failed requests
 type RetryConfig struct {
 	MaxAttempts       int     `yaml:"max_attempts"`                 // Maximum number of retry attempts
@@ -33,13 +43,17 @@ type Source struct {
 	Auth            *Auth             `yaml:"auth,omitempty"`         // Direct authentication configuration
 	AuthRef         string            `yaml:"auth_ref,omitempty"`     // Reference to an auth config
 	ResponseMapping ResponseMapping   `yaml:"response_mapping"`       // Required response mapping
+
+	// GraphQL
+	GraphQLConfig *GraphQLSource `yaml:"graphql,omitempty"`
 }
 
 // SourceType defines currently supported api types
 type SourceType string
 
 const (
-	SourceTypeREST SourceType = "rest"
+	SourceTypeREST    SourceType = "rest"
+	SourceTypeGraphQL SourceType = "graphql"
 )
 
 // Auth defines auth methods.

@@ -248,35 +248,61 @@ func mergeMap(base, overlay map[string]interface{}) map[string]interface{} {
 
 // Parse parses a yaml config
 func (l *PipelineLoader) Parse(data []byte) (interface{}, error) {
-	// Expand variables if an expander is configured
 	if l.expander != nil {
 		data = l.expander.Expand(data)
 	}
 
-	// Unmarshal YAML data into Pipeline struct
 	var pipeline Pipeline
 	if err := yaml.Unmarshal(data, &pipeline); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	// Resolve references if present
+	// add GraphQL branch
+	switch pipeline.Source.Type {
+	case SourceTypeGraphQL:
+		if pipeline.Source.GraphQLConfig == nil {
+			return nil, fmt.Errorf("graphql config missing for source.type=graphql")
+		}
+		if pipeline.Source.GraphQLConfig.Endpoint == "" {
+			return nil, fmt.Errorf("graphql.endpoint is required")
+		}
+		if pipeline.Source.GraphQLConfig.Query == "" {
+			return nil, fmt.Errorf("graphql.query is required")
+		}
+		if pipeline.Source.GraphQLConfig.Headers == nil {
+			pipeline.Source.GraphQLConfig.Headers = map[string]string{
+				"Content-Type": "application/json",
+			}
+		}
+		// propagate Auth from GraphQL block
+		if pipeline.Source.GraphQLConfig.Auth != nil {
+			pipeline.Source.Auth = pipeline.Source.GraphQLConfig.Auth
+		}
+		pipeline.Source.ResponseMapping = pipeline.Source.GraphQLConfig.ResponseMapping
+		// use GraphQL pagination if provided
+		if pipeline.Source.GraphQLConfig.Pagination != nil {
+			pipeline.Pagination = pipeline.Source.GraphQLConfig.Pagination
+		}
+
+	case SourceTypeREST:
+		// leave REST checks to existing validators
+	default:
+		return nil, fmt.Errorf("unsupported source.type: %s", pipeline.Source.Type)
+	}
+
 	if err := l.referenceResolver.ResolveReferences(&pipeline); err != nil {
 		return nil, err
 	}
 
-	// Set default values if a default setter is configured
 	if l.defaultSetter != nil {
 		l.defaultSetter.SetDefaults(&pipeline)
 	}
 
-	// Validate the pipeline configuration
 	var allErrors []ValidationError
 	for _, validator := range l.validators {
-		errors := validator.Validate(&pipeline)
-		allErrors = append(allErrors, errors...)
+		errs := validator.Validate(&pipeline)
+		allErrors = append(allErrors, errs...)
 	}
-
-	// Return any validation errors if there are any
 	if len(allErrors) > 0 {
 		return nil, fmt.Errorf("validation errors: %v", allErrors)
 	}
@@ -296,7 +322,11 @@ func (d *PipelineDefaults) SetDefaults(config interface{}) {
 
 	// Set default HTTP method if not specified
 	if pipeline.Source.Method == "" {
-		pipeline.Source.Method = "GET"
+		if pipeline.Source.Type == SourceTypeGraphQL {
+			pipeline.Source.Method = "POST"
+		} else {
+			pipeline.Source.Method = "GET"
+		}
 	}
 
 	// Set defaults for authentication
@@ -367,7 +397,7 @@ func (v *RequiredFieldValidator) Validate(config interface{}) []ValidationError 
 		errors = append(errors, ValidationError{Field: "source.type", Message: "is required"})
 	}
 
-	if pipeline.Source.Endpoint == "" {
+	if pipeline.Source.Type == SourceTypeREST && pipeline.Source.Endpoint == "" {
 		errors = append(errors, ValidationError{Field: "source.endpoint", Message: "is required"})
 	}
 
