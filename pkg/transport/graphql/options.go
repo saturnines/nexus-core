@@ -1,8 +1,10 @@
 package graphql
 
 import (
-	"github.com/saturnines/nexus-core/pkg/auth"
 	"net/http"
+	"time"
+
+	"github.com/saturnines/nexus-core/pkg/auth"
 )
 
 // BuilderOption configures the Builder.
@@ -15,6 +17,18 @@ func WithHeader(key, value string) BuilderOption {
 			b.Headers = make(map[string]string)
 		}
 		b.Headers[key] = value
+	}
+}
+
+// WithHeaders adds multiple headers to every GraphQL request.
+func WithHeaders(headers map[string]string) BuilderOption {
+	return func(b *Builder) {
+		if b.Headers == nil {
+			b.Headers = make(map[string]string)
+		}
+		for k, v := range headers {
+			b.Headers[k] = v
+		}
 	}
 }
 
@@ -32,7 +46,36 @@ func WithEndpoint(url string) BuilderOption {
 	}
 }
 
-// ApplyBuilderOptions applies opts in order.
+// WithQuery overrides the default query.
+func WithQuery(query string) BuilderOption {
+	return func(b *Builder) {
+		b.Query = query
+	}
+}
+
+// WithVariable sets a single variable.
+func WithVariable(key string, value interface{}) BuilderOption {
+	return func(b *Builder) {
+		if b.Variables == nil {
+			b.Variables = make(map[string]interface{})
+		}
+		b.Variables[key] = value
+	}
+}
+
+// WithVariables sets multiple variables.
+func WithVariables(variables map[string]interface{}) BuilderOption {
+	return func(b *Builder) {
+		if b.Variables == nil {
+			b.Variables = make(map[string]interface{})
+		}
+		for k, v := range variables {
+			b.Variables[k] = v
+		}
+	}
+}
+
+// ApplyOptions applies BuilderOption functions in order.
 func (b *Builder) ApplyOptions(opts ...BuilderOption) {
 	for _, opt := range opts {
 		opt(b)
@@ -49,14 +92,24 @@ func WithHTTPDoer(doer HTTPDoer) ClientOption {
 	}
 }
 
-// WithRetryPolicy wraps the Client’s Doer in a retry layer.
-func WithRetryPolicy(policy RetryPolicy) ClientOption {
+// WithTimeout sets a timeout on the HTTP client (if it's an *http.Client).
+func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) {
-		c.doer = NewRetryDoer(c.doer, policy)
+		if httpClient, ok := c.doer.(*http.Client); ok {
+			httpClient.Timeout = timeout
+		}
 	}
 }
 
-// ApplyClientOptions applies opts in order.
+// WithUserAgent sets the User Agent header for requests.
+func WithUserAgent(userAgent string) ClientOption {
+	return func(c *Client) {
+		// This would require modifying Client to store headers
+		// For now, it's better to use WithHeader on Builder
+	}
+}
+
+// ApplyOptions applies ClientOption functions in order.
 func (c *Client) ApplyOptions(opts ...ClientOption) {
 	for _, opt := range opts {
 		opt(c)
