@@ -365,6 +365,7 @@ func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) (
 func (c *Connector) extractItems(responseData map[string]interface{}) ([]interface{}, error) {
 	rp := c.cfg.Source.ResponseMapping.RootPath
 	if rp == "" {
+		// Default locations
 		if items, ok := responseData["items"].([]interface{}); ok {
 			return items, nil
 		}
@@ -374,7 +375,8 @@ func (c *Connector) extractItems(responseData map[string]interface{}) ([]interfa
 		return []interface{}{responseData}, nil
 	}
 
-	root, ok := ExtractField(responseData, rp)
+	// Use enhanced extraction for root path
+	root, ok := ExtractFieldEnhanced(responseData, rp)
 	if !ok {
 		return nil, fmt.Errorf("root path '%s' not found", rp)
 	}
@@ -399,9 +401,8 @@ func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}
 
 		mapped := make(map[string]interface{})
 		for _, field := range c.cfg.Source.ResponseMapping.Fields {
-			value, ok := ExtractField(itemMap, field.Path)
+			value, ok := ExtractFieldEnhanced(itemMap, field.Path)
 
-			// Check if field is missing OR null
 			if !ok || value == nil {
 				if field.DefaultValue != nil {
 					mapped[field.Name] = field.DefaultValue
@@ -413,7 +414,7 @@ func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}
 			if field.Transform != nil {
 				transformedValue, err := c.applyTransform(value, field.Transform)
 				if err != nil {
-					// Log error but don't fail extraction, a print statement should work rn, can just throw an error from errors.go
+					// Log error but don't fail extraction
 					fmt.Printf("Transform error for field %s: %v\n", field.Name, err)
 					mapped[field.Name] = value // Use original value
 				} else {
