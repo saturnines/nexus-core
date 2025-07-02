@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/transform"
 	"github.com/saturnines/nexus-core/pkg/transport/graphql"
 	"io"
 	"net/http"
@@ -20,11 +21,12 @@ import (
 
 // Connector orchestrates requests, pagination and handling.
 type Connector struct {
-	builder     RequestBuilder
-	client      *http.Client
-	cfg         *config.Pipeline
-	authHandler auth.Handler
-	factory     *pagination.Factory
+	builder           RequestBuilder
+	client            *http.Client
+	cfg               *config.Pipeline
+	authHandler       auth.Handler
+	factory           *pagination.Factory
+	transformRegistry *transform.Registry
 }
 
 // ConnectorOption allows customizing Connector.
@@ -92,11 +94,12 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 	}
 
 	conn := &Connector{
-		builder:     builder,
-		client:      httpClient,
-		cfg:         cfg,
-		authHandler: authHandler,
-		factory:     pagination.DefaultFactory,
+		builder:           builder,
+		client:            httpClient,
+		cfg:               cfg,
+		authHandler:       authHandler,
+		factory:           pagination.DefaultFactory,
+		transformRegistry: transform.DefaultRegistry,
 	}
 
 	for _, opt := range opts {
@@ -376,6 +379,18 @@ func (c *Connector) extractFields(items []interface{}) ([]map[string]interface{}
 				continue
 			}
 
+			// Apply transform if configured
+			if field.Transform != nil {
+				transformedValue, err := c.applyTransform(value, field.Transform)
+				if err != nil {
+					// Log error but don't fail extraction, a print statement should work rn, can just throw an error from errors.go
+					fmt.Printf("Transform error for field %s: %v\n", field.Name, err)
+					mapped[field.Name] = value // Use original value
+				} else {
+					value = transformedValue
+				}
+			}
+
 			mapped[field.Name] = value
 		}
 
@@ -453,5 +468,35 @@ func WithTimeout(timeout time.Duration) ConnectorOption {
 func WithCustomHTTPClient(client *http.Client) ConnectorOption {
 	return func(c *Connector) {
 		c.client = client
+	}
+}
+
+// Apply transform to a value
+func (c *Connector) applyTransform(value interface{}, transformConfig *config.FieldTransform) (interface{}, error) {
+	// Handle transform chains
+	if len(transformConfig.Chain) > 0 {
+		result := value
+		for _, chainTransform := range transformConfig.Chain {
+			transformed, err := c.applyTransform(result, &chainTransform)
+			if err != nil {
+				return nil, fmt.Errorf("chain transform failed: %w", err)
+			}
+			result = transformed
+		}
+		return result, nil
+	}
+
+	transformer, err := c.transformRegistry.Create(transformConfig.Type, transformConfig.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transformer: %w", err)
+	}
+
+	return transformer.Transform(value)
+}
+
+// option to use custom transform registry for custom ones
+func WithTransformRegistry(registry *transform.Registry) ConnectorOption {
+	return func(c *Connector) {
+		c.transformRegistry = registry
 	}
 }
