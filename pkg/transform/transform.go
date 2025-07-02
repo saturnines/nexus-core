@@ -1,3 +1,4 @@
+// pkg/transform/transform.go
 package transform
 
 import (
@@ -184,10 +185,10 @@ func (t *DateTransform) Transform(value interface{}) (interface{}, error) {
 			return nil, err
 		}
 	case float64:
-		// Assume Unix timestamp
-		inputTime = time.Unix(int64(v), 0)
+		// Assume Unix timestamp in UTC
+		inputTime = time.Unix(int64(v), 0).UTC()
 	case int64:
-		inputTime = time.Unix(v, 0)
+		inputTime = time.Unix(v, 0).UTC()
 	default:
 		return nil, fmt.Errorf("cannot parse date from %T", value)
 	}
@@ -202,12 +203,11 @@ func (t *DateTransform) parseTime(value string, format string) (time.Time, error
 	case "RFC3339Nano":
 		return time.Parse(time.RFC3339Nano, value)
 	case "DateTime":
-		return time.Parse("2006-01-02 15:04:05", value)
+		return time.ParseInLocation("2006-01-02 15:04:05", value, time.UTC)
 	case "Date":
-		return time.Parse("2006-01-02", value)
+		return time.ParseInLocation("2006-01-02", value, time.UTC)
 	default:
-		// Try custom format
-		return time.Parse(format, value)
+		return time.ParseInLocation(format, value, time.UTC)
 	}
 }
 
