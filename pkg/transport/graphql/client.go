@@ -2,7 +2,7 @@ package graphql
 
 import "net/http"
 
-// HTTPDoer is the same minimal interface used by rest.RequestHelper :contentReference[oaicite:1]{index=1}.
+// HTTPDoer is the same minimal interface used by rest.RequestHelper
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }

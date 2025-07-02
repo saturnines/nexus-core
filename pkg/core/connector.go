@@ -196,11 +196,26 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 		return nil, nil
 	}
 
+	//GraphQL path
+	if c.cfg.Source.Type == config.SourceTypeGraphQL {
+		// we know builder is *graphql.Builder
+		b := c.builder.(*graphql.Builder)
+		// wrap HTTP client in a GraphQL client
+		gcli := graphql.NewClient(c.client)
+
+		// grab the pagination settings
+		p := c.cfg.Source.GraphQLConfig.Pagination
+		nextPath := strings.Split(p.CursorPath, ".")
+		hasNextPath := strings.Split(p.HasMorePath, ".")
+
+		return graphql.NewPager(ctx, b, gcli, p.CursorParam, nextPath, hasNextPath)
+	}
+
+	// ── REST path via factory ─────────────────────────────
 	req, err := c.builder.Build(ctx)
 	if err != nil {
 		return nil, err
 	}
-
 	opts := c.paginationConfigToPagerOptions()
 	return c.factory.CreatePager(
 		string(c.cfg.Pagination.Type),
@@ -306,6 +321,13 @@ func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) (
 		return nil, errors.WrapError(fmt.Errorf("API returned status %d", statusCode), errors.ErrHTTPResponse, "unexpected status code")
 	}
 
+	// Check for GraphQL errors if this is a GraphQL source
+	if c.cfg.Source.Type == config.SourceTypeGraphQL {
+		if err := errors.CheckGraphQLErrors(bodyBytes); err != nil {
+			return nil, err // Already wrapped by CheckGraphQLErrors
+		}
+	}
+
 	// Try to detect if response is an array or object
 	var responseData interface{}
 	if err := json.Unmarshal(bodyBytes, &responseData); err != nil {
@@ -315,6 +337,15 @@ func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) (
 	// Handle null response
 	if responseData == nil {
 		return []interface{}{}, nil
+	}
+
+	// For GraphQL, extract data field first
+	if c.cfg.Source.Type == config.SourceTypeGraphQL {
+		if objMap, ok := responseData.(map[string]interface{}); ok {
+			if data, exists := objMap["data"]; exists {
+				responseData = data
+			}
+		}
 	}
 
 	// Handle array at root level (like JSONPlaceholder)
