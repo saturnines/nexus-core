@@ -115,10 +115,11 @@ type ResponseMapping struct {
 
 // Field defines a specific field to extract
 type Field struct {
-	Name         string      `yaml:"name"`                    // Name of extracted field
-	Path         string      `yaml:"path"`                    // JSONPath to field value
-	Type         string      `yaml:"type,omitempty"`          // Data type for conversion
-	DefaultValue interface{} `yaml:"default_value,omitempty"` // Default value if field is missing
+	Name         string          `yaml:"name"`                    // Name of extracted field
+	Path         string          `yaml:"path"`                    // JSONPath to field value
+	Type         string          `yaml:"type,omitempty"`          // Data type for conversion
+	DefaultValue interface{}     `yaml:"default_value,omitempty"` // Default value if field is missing
+	Transform    *FieldTransform `yaml:"transform,omitempty"`     // NEW: Transform configuration
 }
 
 // Pagination defines different pagination types
@@ -183,4 +184,12 @@ type Schema struct {
 	Unique     bool     `yaml:"unique,omitempty"`      // Whether field must be unique
 	Validators []string `yaml:"validators,omitempty"`  // Validation rules
 
+}
+
+// FieldTransorm defines tranformation to apply for whatever field
+// Example below
+type FieldTransform struct {
+	Type   string                 `yaml:"type"`             // Transform type: "date", "int", "string", etc.
+	Config map[string]interface{} `yaml:"config,omitempty"` // Transform specific config
+	Chain  []FieldTransform       `yaml:"chain,omitempty"`  // For chaining multiple transforms
 }
