@@ -5,18 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/saturnines/nexus-core/pkg/transform"
-	"github.com/saturnines/nexus-core/pkg/transport/graphql"
-	"io"
-	"net/http"
-	"strings"
-	"time"
-
 	"github.com/saturnines/nexus-core/pkg/auth"
 	"github.com/saturnines/nexus-core/pkg/config"
 	"github.com/saturnines/nexus-core/pkg/errors"
 	"github.com/saturnines/nexus-core/pkg/pagination"
+	"github.com/saturnines/nexus-core/pkg/transform"
+	"github.com/saturnines/nexus-core/pkg/transport/graphql"
 	"github.com/saturnines/nexus-core/pkg/transport/rest"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 )
 
 // Connector orchestrates requests, pagination and handling.
