@@ -3,6 +3,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"gopkg.in/yaml.v3"
 	"os"
@@ -249,7 +250,12 @@ func mergeMap(base, overlay map[string]interface{}) map[string]interface{} {
 // Parse parses a yaml config
 func (l *PipelineLoader) Parse(data []byte) (interface{}, error) {
 	if l.expander != nil {
-		data = l.expander.Expand(data)
+		// Temp Fix to just skip GRAPHQL $ Wars
+		// don’t stomp GraphQL $vars
+		// if the raw YAML declares a GraphQL source, skip expansion
+		if !bytes.Contains(data, []byte("type: graphql")) {
+			data = l.expander.Expand(data)
+		}
 	}
 
 	var pipeline Pipeline
