@@ -25,6 +25,14 @@ func NewBuilder(
 	headers map[string]string,
 	authHandler auth.Handler,
 ) *Builder {
+	if variables == nil {
+		variables = make(map[string]interface{})
+	}
+
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
 	return &Builder{
 		Endpoint:    endpoint,
 		Query:       query,
@@ -36,26 +44,41 @@ func NewBuilder(
 
 // Build creates the *http.Request with JSON body.
 func (b *Builder) Build(ctx context.Context) (*http.Request, error) {
+	variables := b.Variables
+	if variables == nil {
+		variables = make(map[string]interface{})
+	}
+
 	body := map[string]interface{}{
 		"query":     b.Query,
-		"variables": b.Variables,
+		"variables": variables,
 	}
+
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.Endpoint, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}
+
+	// Set default headers first
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Then apply custom headers (can override defaults)
 	for k, v := range b.Headers {
 		req.Header.Set(k, v)
 	}
-	req.Header.Set("Content-Type", "application/json")
+
+	// Apply authentication last
 	if b.AuthHandler != nil {
 		if err := b.AuthHandler.ApplyAuth(req); err != nil {
 			return nil, err
 		}
 	}
+
 	return req, nil
 }
