@@ -20,9 +20,10 @@ type GraphQLPager struct {
 	hasNextPath []string
 
 	// Mutable state (protected by mutex)
-	mu      sync.RWMutex
-	hasNext bool
-	first   bool
+	mu         sync.RWMutex
+	hasNext    bool
+	first      bool
+	nextCursor string
 }
 
 // NewPager returns a pagination.Pager for GraphQL cursor paging.
@@ -67,6 +68,7 @@ func (p *GraphQLPager) NextRequest() (*http.Request, error) {
 	p.mu.RLock()
 	hasNext := p.hasNext
 	first := p.first
+	nextCursor := p.nextCursor
 	p.mu.RUnlock()
 
 	if !first && !hasNext {
@@ -85,6 +87,11 @@ func (p *GraphQLPager) NextRequest() (*http.Request, error) {
 	// Copy variables
 	for k, v := range p.builder.Variables {
 		builderCopy.Variables[k] = v
+	}
+
+	// Add cursor for subsequent requests
+	if !first && nextCursor != "" {
+		builderCopy.Variables[p.cursorKey] = nextCursor
 	}
 
 	// Use a dummy context - the caller will provide the real context
@@ -106,14 +113,12 @@ func (p *GraphQLPager) UpdateState(resp *http.Response) error {
 	// Mark that we've made the first request
 	p.first = false
 
-	// Extract endCursor and update builder variables
+	// Extract endCursor and store it separately (don't mutate builder)
 	endCursor := traverse(data, p.nextPath...)
 	if str, ok := endCursor.(string); ok && str != "" {
-		// Update the builder's variables for the next request
-		if p.builder.Variables == nil {
-			p.builder.Variables = make(map[string]interface{})
-		}
-		p.builder.Variables[p.cursorKey] = str
+		p.nextCursor = str
+	} else {
+		p.nextCursor = ""
 	}
 
 	// Extract hasNextPage
@@ -142,11 +147,7 @@ func (p *GraphQLPager) Reset() {
 
 	p.hasNext = true
 	p.first = true
-
-	// Remove cursor from variables
-	if p.builder.Variables != nil {
-		delete(p.builder.Variables, p.cursorKey)
-	}
+	p.nextCursor = ""
 }
 
 // traverse digs into nested maps via a path of keys.
