@@ -116,15 +116,15 @@ func (c *Connector) Extract(ctx context.Context) ([]map[string]interface{}, erro
 	if c.cfg.Pagination == nil {
 		req, err := c.builder.Build(ctx)
 		if err != nil {
-			return nil, errors.WrapError(err, errors.ErrHTTPRequest, "build request") // ✅ Fixed
+			return nil, errors.WrapError(err, errors.ErrHTTPRequest, "build request")
 		}
 
 		resp, err := c.client.Do(req)
 		if err != nil {
-			return nil, errors.WrapError(err, errors.ErrHTTPRequest, "http do") // ✅ Fixed
+			return nil, errors.WrapError(err, errors.ErrHTTPRequest, "http do")
 		}
 
-		batch, err := c.handleResponse(resp) // ✅ This method is defined below
+		batch, err := c.handleResponse(resp)
 		if err != nil {
 			return nil, err
 		}
@@ -196,19 +196,22 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 		return nil, nil
 	}
 
-	//GraphQL path
+	// GraphQL path  treat like REST for pagination
 	if c.cfg.Source.Type == config.SourceTypeGraphQL {
-		// we know builder is *graphql.Builder
-		b := c.builder.(*graphql.Builder)
-		// wrap HTTP client in a GraphQL client
-		gcli := graphql.NewClient(c.client)
+		// Build the initial request using GraphQL builder
+		req, err := c.builder.Build(ctx)
+		if err != nil {
+			return nil, err
+		}
 
-		// grab the pagination settings
-		p := c.cfg.Source.GraphQLConfig.Pagination
-		nextPath := strings.Split(p.CursorPath, ".")
-		hasNextPath := strings.Split(p.HasMorePath, ".")
-
-		return graphql.NewPager(ctx, b, gcli, p.CursorParam, nextPath, hasNextPath)
+		// Use the standard factory with page pagination
+		opts := c.paginationConfigToPagerOptions()
+		return c.factory.CreatePager(
+			string(c.cfg.Pagination.Type), // "page"
+			c.client,
+			req,
+			opts,
+		)
 	}
 
 	// ── REST path via factory ─────────────────────────────
@@ -315,7 +318,7 @@ func (c *Connector) createBufferedResponse(originalResp *http.Response, bodyByte
 	}
 }
 
-// processResponseFromBytes processes response from pre-read body bytes
+// processResponseFromBytes processes response from preread body bytes
 func (c *Connector) processResponseFromBytes(statusCode int, bodyBytes []byte) ([]interface{}, error) {
 	if statusCode != http.StatusOK {
 		return nil, errors.WrapError(fmt.Errorf("API returned status %d", statusCode), errors.ErrHTTPResponse, "unexpected status code")
@@ -437,13 +440,13 @@ func ExtractField(data map[string]interface{}, path string) (interface{}, bool) 
 		return nil, false
 	}
 
-	// Simple case - no dots
+	// Simple case  no dots
 	if !strings.Contains(path, ".") {
 		value, ok := data[path]
 		return value, ok
 	}
 
-	// Nested case - traverse the path
+	// Nested case traverse the path
 	parts := strings.Split(path, ".")
 	var current interface{} = data
 
