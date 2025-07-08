@@ -1,4 +1,4 @@
-package api
+package rest_e2e_tests
 
 import (
 	"context"
