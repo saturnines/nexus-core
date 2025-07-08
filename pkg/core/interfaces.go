@@ -15,3 +15,8 @@ type Pager interface {
 	Update(resp *http.Response) error
 	HasNext() bool
 }
+
+type Extractor interface {
+	Items(raw []byte) ([]interface{}, error)
+	Map(item interface{}) (map[string]interface{}, error)
+}
