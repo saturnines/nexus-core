@@ -3,11 +3,11 @@
 package config
 
 import (
-	"bytes"
 	"fmt"
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -250,12 +250,8 @@ func mergeMap(base, overlay map[string]interface{}) map[string]interface{} {
 // Parse parses a yaml config
 func (l *PipelineLoader) Parse(data []byte) (interface{}, error) {
 	if l.expander != nil {
-		// Temp Fix to just skip GRAPHQL $ Wars
-		// don’t stomp GraphQL $vars
-		// if the raw YAML declares a GraphQL source, skip expansion
-		if !bytes.Contains(data, []byte("type: graphql")) {
-			data = l.expander.Expand(data)
-		}
+		// Use smart expansion that only expands ${VAR} patterns, not $var patterns
+		data = l.smartExpand(data)
 	}
 
 	var pipeline Pipeline
@@ -314,6 +310,20 @@ func (l *PipelineLoader) Parse(data []byte) (interface{}, error) {
 	}
 
 	return &pipeline, nil
+}
+
+func (l *PipelineLoader) smartExpand(data []byte) []byte {
+	// This regex matches ${...} but not $variable
+	// It captures the variable name inside the braces
+	envVarPattern := regexp.MustCompile(`\$\{([^}]+)\}`)
+
+	result := envVarPattern.ReplaceAllFunc(data, func(match []byte) []byte {
+		varName := string(match[2 : len(match)-1])
+		value := os.Getenv(varName)
+		return []byte(value)
+	})
+
+	return result
 }
 
 // PipelineDefaults implements DefaultValueSetter for Pipeline
