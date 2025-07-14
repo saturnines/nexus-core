@@ -65,7 +65,7 @@ go get github.com/saturnines/nexus-core
 
 ## Status
 
-Works pretty well for most APIs I've thrown at it. Still adding stuff when I find edge cases that break it.
+Works pretty well for most APIs I've thrown at it.
 
 Feel free to try it out or submit PRs if you find bugs.
 
