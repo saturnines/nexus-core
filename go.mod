@@ -1,5 +1,5 @@
 module github.com/saturnines/nexus-core
-
+//
 go 1.22
 
 require (
