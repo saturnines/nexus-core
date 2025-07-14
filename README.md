@@ -1,6 +1,6 @@
 # Nexus Core
 
-Universal API data extractor built in Go. Configure any REST/GraphQL API with YAML and extract all data automatically.
+Prototype universal API data extractor built in Go. Configure any REST/GraphQL API with YAML and extract all data automatically.
 
 ## Quick Start
 
