@@ -1569,7 +1569,7 @@ func TestConnector_MixedTypesEdgeCases(t *testing.T) {
 				"invalid",                // This will cause the connector to fail
 				map[string]interface{}{"id": 1},
 			},
-			expectError: true, // FIXED: Your connector fails fast on invalid items
+			expectError: true,
 			description: "Mix including empty object - fails on first invalid item",
 		},
 		{
@@ -1583,7 +1583,7 @@ func TestConnector_MixedTypesEdgeCases(t *testing.T) {
 				}, // Valid object with array content
 				42, // Invalid - will cause failure
 			},
-			expectError: true, // FIXED: Your connector fails fast on invalid items
+			expectError: true,
 			description: "Complex valid objects mixed with invalid - fails on invalid item",
 		},
 		{
