@@ -8,6 +8,10 @@ import (
 
 // ExtractFieldEnhanced extracts a field from data using an enhanced path syntax
 // Supports:
+// - Nested fields: "user.name"
+// - Array indices: "items[0]", "items[-1]" (negative for last)
+// - Array wildcards: "items[*].name"
+// - Complex paths: "data.users[*].addresses[0].city"
 func ExtractFieldEnhanced(data interface{}, path string) (interface{}, bool) {
 	if path == "" {
 		return nil, false
@@ -98,7 +102,7 @@ func parsePath(path string) ([]PathSegment, error) {
 				// Move past this bracket pair
 				remaining = remaining[endIdx+1:]
 
-				// Handle chained array access like
+				// Handle chained array access like [0][1]
 				if len(remaining) > 0 && !strings.HasPrefix(remaining, "[") {
 					// There's a field after the bracket
 					if dotIdx := strings.Index(remaining, "."); dotIdx != -1 {
@@ -143,7 +147,7 @@ func traversePath(data interface{}, segments []PathSegment) (interface{}, bool) 
 				// and this is followed by a wildcard, we might be doing
 				// something like items[*].name
 				if i+1 < len(segments) && segments[i+1].Type == ArrayWildcard {
-					// Skip this, will be handled by wildcard
+					// Skip wildcard will handle
 					continue
 				}
 				return nil, false
@@ -189,7 +193,7 @@ func traversePath(data interface{}, segments []PathSegment) (interface{}, bool) 
 
 			for _, elem := range arr {
 				if result, ok := traversePath(elem, remainingSegments); ok {
-					// Handle nested wildcards flatten arrays
+					// Handle nested wildcards - flatten arrays
 					if resultArr, isArr := result.([]interface{}); isArr {
 						results = append(results, resultArr...)
 					} else {
@@ -203,17 +207,6 @@ func traversePath(data interface{}, segments []PathSegment) (interface{}, bool) 
 	}
 
 	return current, true
-}
-
-// ExtractFieldCompat backward compatibility with the original ExtractField (This is a mess and I can be bothered to clean it.)
-func ExtractFieldCompat(data map[string]interface{}, path string) (interface{}, bool) {
-	// Check if path contains array notation
-	if strings.Contains(path, "[") {
-		return ExtractFieldEnhanced(data, path)
-	}
-
-	// Use original simple implementation for paths without arrays
-	return ExtractField(data, path)
 }
 
 // ExtractFieldsMulti Helper function to extract multiple fields with array support
