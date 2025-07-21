@@ -546,7 +546,6 @@ func TestConnector_OAuth2_PreemptiveRefresh(t *testing.T) {
 		t.Fatalf("Failed to create connector: %v", err)
 	}
 
-	// First Extract: fetch token thrice? Actually only once
 	_, err = connector.Extract(context.Background())
 	if err != nil {
 		t.Fatalf("First extract failed: %v", err)
