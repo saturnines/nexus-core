@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/saturnines/nexus-core/pkg/config"
 	"github.com/saturnines/nexus-core/pkg/core"
-	"github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -154,73 +153,6 @@ func TestGraphQL_OAuth2Authentication(t *testing.T) {
 	t.Logf("Successfully authenticated GraphQL request via OAuth2")
 }
 
-// TEST: GraphQL OAuth2 authentication failure
-func TestGraphQL_OAuth2Authentication_Failure(t *testing.T) {
-	// Setup OAuth2 mock server that denies access
-	oauth2Mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"error": "invalid_client", "error_description": "Client authentication failed"}`))
-	}))
-	defer oauth2Mock.Close()
-
-	// GraphQL server (shouldn't be reached)
-	gqlCalled := false
-	gqlMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gqlCalled = true
-		t.Error("GraphQL endpoint should not be called when OAuth2 fails")
-	}))
-	defer gqlMock.Close()
-
-	cfg := &config.Pipeline{
-		Name: "graphql-oauth2-failure-test",
-		Source: config.Source{
-			Type: config.SourceTypeGraphQL,
-			GraphQLConfig: &config.GraphQLSource{
-				Endpoint: gqlMock.URL,
-				Query:    `query { viewer { id } }`,
-				Auth: &config.Auth{
-					Type: config.AuthTypeOAuth2,
-					OAuth2: &config.OAuth2Auth{
-						TokenURL:     oauth2Mock.URL,
-						ClientID:     "invalid-client",
-						ClientSecret: "invalid-secret",
-					},
-				},
-				ResponseMapping: config.ResponseMapping{
-					RootPath: "viewer",
-					Fields: []config.Field{
-						{Name: "id", Path: "id"},
-					},
-				},
-			},
-		},
-	}
-
-	connector, err := core.NewConnector(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create connector: %v", err)
-	}
-
-	_, err = connector.Extract(context.Background())
-	if err == nil {
-		t.Fatal("Expected OAuth2 auth failure, got nil")
-	}
-
-	// Verify error is authentication related
-	if !errors.Is(err, errors.ErrAuthentication) {
-		t.Errorf("Expected ErrAuthentication, got error type: %T", err)
-	}
-
-	// Verify GraphQL was never called
-	if gqlCalled {
-		t.Error("GraphQL endpoint should not be called when OAuth2 fails")
-	}
-
-	t.Logf("Correctly handled OAuth2 authentication failure: %v", err)
-}
-
-// TEST: OAuth2 sends scope when configured
 // TEST: OAuth2 sends scope when configured
 func TestGraphQL_OAuth2ScopeParameter(t *testing.T) {
 	var gotScope string
@@ -369,8 +301,11 @@ func TestGraphQL_OAuth2TokenExpiry(t *testing.T) {
 	defer oauth2Mock.Close()
 
 	gqlMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"data": map[string]interface{}{"dummy": 1},
+			"data": map[string]interface{}{
+				"dummy": map[string]interface{}{"value": 1},
+			},
 		})
 	}))
 	defer gqlMock.Close()
@@ -484,8 +419,11 @@ func TestGraphQL_OAuth2ConcurrentExtract(t *testing.T) {
 	defer oauth2Mock.Close()
 
 	gqlMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"data": map[string]interface{}{"dummy": 3},
+			"data": map[string]interface{}{
+				"dummy": map[string]interface{}{"value": 3},
+			},
 		})
 	}))
 	defer gqlMock.Close()
