@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// BEWARE This also kind of tests status errors, we might to make a sepeerate test.
+
 func TestPipelineLoader_ValidMinimalConfig(t *testing.T) {
 	// minimal valid config
 	yamlContent := `
