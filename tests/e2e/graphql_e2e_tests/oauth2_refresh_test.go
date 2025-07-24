@@ -519,3 +519,106 @@ func TestGraphQL_OAuth2_NoRefreshOnNon401(t *testing.T) {
 
 	t.Logf("Correctly avoided token refresh on 403 error")
 }
+
+// TEST: OAuth2 sends extra parameters when configured
+func TestGraphQL_OAuth2_ExtraParams(t *testing.T) {
+	var receivedParams map[string]string
+	oauth2Mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+
+		// Capture all form parameters
+		receivedParams = make(map[string]string)
+		for key, values := range r.Form {
+			if len(values) > 0 {
+				receivedParams[key] = values[0]
+			}
+		}
+
+		// Return token
+		response := map[string]interface{}{
+			"access_token": "test_token_123",
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer oauth2Mock.Close()
+
+	gqlMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]interface{}{
+			"data": map[string]interface{}{
+				"viewer": map[string]interface{}{"id": "123"},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer gqlMock.Close()
+
+	cfg := &config.Pipeline{
+		Name: "graphql-oauth2-extra-params-test",
+		Source: config.Source{
+			Type: config.SourceTypeGraphQL,
+			GraphQLConfig: &config.GraphQLSource{
+				Endpoint: gqlMock.URL,
+				Query:    `query { viewer { id } }`,
+				ResponseMapping: config.ResponseMapping{
+					RootPath: "viewer",
+					Fields:   []config.Field{{Name: "id", Path: "id"}},
+				},
+			},
+			Auth: &config.Auth{
+				Type: config.AuthTypeOAuth2,
+				OAuth2: &config.OAuth2Auth{
+					TokenURL:     oauth2Mock.URL,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					Scope:        "read:user",
+					ExtraParams: map[string]string{
+						"audience":     "https://api.example.com",
+						"custom_param": "custom_value",
+						"tenant_id":    "tenant-123",
+					},
+				},
+			},
+		},
+	}
+
+	connector, err := core.NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create connector: %v", err)
+	}
+
+	_, err = connector.Extract(context.Background())
+	if err != nil {
+		t.Fatalf("Extract failed: %v", err)
+	}
+
+	// Verify all standard params were sent
+	expectedParams := map[string]string{
+		"grant_type":    "client_credentials",
+		"client_id":     "test-client",
+		"client_secret": "test-secret",
+		"scope":         "read:user",
+		// Extra params
+		"audience":     "https://api.example.com",
+		"custom_param": "custom_value",
+		"tenant_id":    "tenant-123",
+	}
+
+	for key, expected := range expectedParams {
+		if actual, ok := receivedParams[key]; !ok {
+			t.Errorf("Missing parameter %s", key)
+		} else if actual != expected {
+			t.Errorf("Parameter %s: expected '%s', got '%s'", key, expected, actual)
+		}
+	}
+
+	// Ensure no unexpected params
+	if len(receivedParams) != len(expectedParams) {
+		t.Errorf("Unexpected parameters sent. Got %d, expected %d", len(receivedParams), len(expectedParams))
+		t.Logf("All received params: %+v", receivedParams)
+	}
+
+	t.Logf("Successfully sent OAuth2 request with extra parameters")
+}
