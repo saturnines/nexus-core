@@ -20,6 +20,7 @@ var (
 	ErrTokenExpired   = errors.New("token expired")
 	ErrValidation     = errors.New("validation error")
 	ErrGraphQL        = errors.New("GraphQL error")
+	ErrRateLimited    = errors.New("RateLimiting error")
 )
 
 // GraphQLError represents a single GraphQL error
