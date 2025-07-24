@@ -27,7 +27,6 @@ func NewAuthRegistry() *AuthRegistry {
 	registry.Register(config.AuthTypeAPIKey, createAPIKeyAuth)
 	registry.Register(config.AuthTypeBearer, createBearerAuth)
 	registry.Register(config.AuthTypeOAuth2, createOAuth2Auth)
-
 	return registry
 }
 
