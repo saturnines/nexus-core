@@ -69,10 +69,11 @@ type Auth struct {
 type AuthType string
 
 const (
-	AuthTypeBasic  AuthType = "basic"
-	AuthTypeAPIKey AuthType = "api_key"
-	AuthTypeOAuth2 AuthType = "oauth2"
-	AuthTypeBearer AuthType = "bearer"
+	AuthTypeBasic         AuthType = "basic"
+	AuthTypeAPIKey        AuthType = "api_key"
+	AuthTypeOAuth2        AuthType = "oauth2"
+	AuthTypeBearer        AuthType = "bearer"
+	AuthTypeGoogleService AuthType = "google_service_account"
 )
 
 // BasicAuth contains auth credentials for the api
