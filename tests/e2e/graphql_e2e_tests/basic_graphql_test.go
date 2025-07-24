@@ -1,4 +1,4 @@
-package graphql_test
+package graphql_e2e_tests
 
 import (
 	"context"
