@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/saturnines/nexus-core/pkg/auth"
@@ -234,10 +235,39 @@ func (c *Connector) createPager(ctx context.Context) (pagination.Pager, error) {
 	if c.cfg.Pagination == nil {
 		return nil, nil
 	}
+
+	//  handling for GraphQL cursor pagination (may need to clean up this if I decide to add more support for other types.)
+	if c.cfg.Source.Type == config.SourceTypeGraphQL &&
+		c.cfg.Pagination.Type == config.PaginationTypeCursor {
+
+		gqlBuilder, ok := c.builder.(*graphql.Builder)
+		if !ok {
+			return nil, fmt.Errorf("expected GraphQL builder for GraphQL source")
+		}
+
+		// Parse the paths as is
+		cursorPath := strings.Split(c.cfg.Pagination.CursorPath, ".")
+		hasNextPath := strings.Split(c.cfg.Pagination.HasMorePath, ".")
+
+		// Create GraphQL client wrapper
+		gqlClient := graphql.NewClient(c.client)
+
+		return graphql.NewPager(
+			ctx,
+			gqlBuilder,
+			gqlClient,
+			c.cfg.Pagination.CursorParam,
+			cursorPath,
+			hasNextPath,
+		)
+	}
+
+	// For REST sources default use the existing factory approach
 	req, err := c.builder.Build(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	opts := c.paginationConfigToPagerOptions()
 	return c.factory.CreatePager(string(c.cfg.Pagination.Type), c.client, req, opts)
 }
