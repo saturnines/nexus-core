@@ -2,6 +2,7 @@ package pagination
 
 import (
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 	"strings"
 )
@@ -107,7 +108,11 @@ func (p *PagePager) NextRequest() (*http.Request, error) {
 func (p *PagePager) UpdateState(resp *http.Response) error {
 	// 1) Check HTTP status.
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("pagination: unexpected status %d", resp.StatusCode)
+		return errors.WrapError(
+			fmt.Errorf("pagination: unexpected status %d", resp.StatusCode),
+			errors.ErrPagination,
+			"update page state",
+		)
 	}
 
 	// Unmarshal JSON.
@@ -161,11 +166,19 @@ func lookupInt(body map[string]interface{}, path string) (int, error) {
 	for _, key := range parts {
 		m, ok := cur.(map[string]interface{})
 		if !ok {
-			return 0, fmt.Errorf("lookupInt: %q is not an object", key)
+			return 0, errors.WrapError(
+				fmt.Errorf("lookupInt: %q is not an object", key),
+				errors.ErrExtraction,
+				"traverse object",
+			)
 		}
 		cur, ok = m[key]
 		if !ok {
-			return 0, fmt.Errorf("lookupInt: missing field %q", key)
+			return 0, errors.WrapError(
+				fmt.Errorf("lookupInt: missing field %q", key),
+				errors.ErrExtraction,
+				"find field",
+			)
 		}
 	}
 
@@ -178,6 +191,10 @@ func lookupInt(body map[string]interface{}, path string) (int, error) {
 	case int64:
 		return int(v), nil
 	default:
-		return 0, fmt.Errorf("lookupInt: field %q is not a number, got %T", path, v)
+		return 0, errors.WrapError(
+			fmt.Errorf("lookupInt: field %q is not a number, got %T", path, v),
+			errors.ErrExtraction,
+			"convert to integer",
+		)
 	}
 }
