@@ -3,11 +3,11 @@ package auth
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 )
 
 // BasicAuth implements the interface for HTTP basic authentication
-// Might be bad practice but I think yaml supports env variables
 type BasicAuth struct {
 	Username string // Username for Basic auth
 	Password string // Password for Basic auth
@@ -25,7 +25,11 @@ func NewBasicAuth(username, password string) *BasicAuth {
 func (b *BasicAuth) ApplyAuth(req *http.Request) error {
 	// Validate inputs
 	if b.Username == "" {
-		return fmt.Errorf("username is empty and is required for basic auth")
+		return errors.WrapError(
+			fmt.Errorf("username is required"),
+			errors.ErrConfiguration,
+			"apply basic auth",
+		)
 	}
 	// don't think I need to validate pw bc it can be empty too
 
