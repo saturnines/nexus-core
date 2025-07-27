@@ -71,7 +71,11 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 	case config.SourceTypeGraphQL:
 		g := cfg.Source.GraphQLConfig
 		if g == nil {
-			return nil, fmt.Errorf("graphql config missing")
+			return nil, errors.WrapError(
+				fmt.Errorf("graphql config missing"),
+				errors.ErrConfiguration,
+				"create GraphQL connector",
+			)
 		}
 		builder = graphql.NewBuilder(
 			g.Endpoint,
@@ -83,7 +87,11 @@ func NewConnector(cfg *config.Pipeline, opts ...ConnectorOption) (*Connector, er
 		extractor = NewGraphQLExtractor(g)
 
 	default:
-		return nil, fmt.Errorf("unsupported source type: %s", cfg.Source.Type)
+		return nil, errors.WrapError(
+			fmt.Errorf("unsupported source type: %s", cfg.Source.Type),
+			errors.ErrConfiguration,
+			"create connector",
+		)
 	}
 
 	conn := &Connector{
@@ -210,7 +218,11 @@ func (c *Connector) extractFromBytes(b []byte) ([]map[string]interface{}, error)
 	for i, item := range items {
 		m, ok := item.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("item at index %d is not a map: %v", i, item)
+			return nil, errors.WrapError(
+				fmt.Errorf("item at index %d is not a map: %v", i, item),
+				errors.ErrExtraction,
+				"validate item type",
+			)
 		}
 		mapped, err := c.extractor.Map(m)
 		if err != nil {
