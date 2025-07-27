@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"io"
 	"net/http"
 	"sync"
@@ -39,7 +40,7 @@ func (rt *OAuth2RoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 	// Apply OAuth2 token
 	if err := rt.oauth2.ApplyAuth(reqCopy); err != nil {
-		return nil, fmt.Errorf("failed to apply OAuth2 auth: %w", err)
+		return nil, errors.WrapError(err, errors.ErrAuthentication, "apply OAuth2 auth in round tripper")
 	}
 
 	// Send the request
@@ -88,7 +89,7 @@ func (rt *OAuth2RoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 	// Apply auth again (this should trigger refresh)
 	if err := rt.oauth2.ApplyAuth(retryCopy); err != nil {
-		return nil, err
+		return nil, errors.WrapError(err, errors.ErrAuthentication, "apply OAuth2 auth in retry")
 	}
 
 	// Retry the request
