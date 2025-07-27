@@ -2,6 +2,7 @@ package pagination
 
 import (
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -60,7 +61,11 @@ func ExtractNestedValue(data interface{}, path string) (interface{}, error) {
 			// Normal map access
 			val, ok := v[part]
 			if !ok {
-				return nil, fmt.Errorf("key %q not found", part)
+				return nil, errors.WrapError(
+					fmt.Errorf("key %q not found", part),
+					errors.ErrExtraction,
+					"extract nested value",
+				)
 			}
 			current = val
 
@@ -69,17 +74,29 @@ func ExtractNestedValue(data interface{}, path string) (interface{}, error) {
 			if part == "-1" {
 				// Get last element
 				if len(v) == 0 {
-					return nil, fmt.Errorf("cannot get last element of empty array")
+					return nil, errors.WrapError(
+						fmt.Errorf("cannot get last element of empty array"),
+						errors.ErrExtraction,
+						"extract array element",
+					)
 				}
 				current = v[len(v)-1]
 			} else if idx, err := parseInt(part); err == nil {
 				// Numeric index
 				if idx < 0 || idx >= len(v) {
-					return nil, fmt.Errorf("array index %d out of bounds", idx)
+					return nil, errors.WrapError(
+						fmt.Errorf("array index %d out of bounds", idx),
+						errors.ErrExtraction,
+						"access array index",
+					)
 				}
 				current = v[idx]
 			} else {
-				return nil, fmt.Errorf("invalid array index: %s", part)
+				return nil, errors.WrapError(
+					fmt.Errorf("cannot traverse %T with key %q", current, part),
+					errors.ErrExtraction,
+					"traverse data structure",
+				)
 			}
 
 		default:
@@ -134,13 +151,17 @@ func (p *ThreadSafeCursorPager) UpdateState(resp *http.Response) error {
 
 	// Validate response
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("cursor pagination failed: HTTP %d", resp.StatusCode)
+		return errors.WrapError(
+			fmt.Errorf("cursor pagination failed: HTTP %d", resp.StatusCode),
+			errors.ErrPagination,
+			"update cursor state",
+		)
 	}
 
 	// Parse response body
 	body, err := parseBody(resp)
 	if err != nil {
-		return fmt.Errorf("cursor pagination: failed to parse response: %w", err)
+		return errors.WrapError(err, errors.ErrPagination, "parse cursor response body")
 	}
 
 	// Extract next cursor value using our enhanced extraction
