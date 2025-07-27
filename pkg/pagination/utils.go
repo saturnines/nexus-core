@@ -3,6 +3,7 @@ package pagination
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 	"strings"
 )
@@ -14,7 +15,11 @@ func parseBody(resp *http.Response) (map[string]interface{}, error) {
 
 	var raw interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, err
+		return nil, errors.WrapError(
+			fmt.Errorf("unexpected response type: %T", raw),
+			errors.ErrHTTPResponse,
+			"parse response body",
+		)
 	}
 
 	// If it's already an object, return it
@@ -32,6 +37,7 @@ func parseBody(resp *http.Response) (map[string]interface{}, error) {
 	return nil, fmt.Errorf("unexpected response type: %T", raw)
 }
 
+// This isn't used might be used in the future I guess
 func lookupString(body map[string]interface{}, path string) (string, error) {
 	parts := strings.Split(path, ".")
 	var cur interface{} = body
@@ -65,16 +71,28 @@ func lookupBool(body map[string]interface{}, path string) (bool, error) {
 	for _, key := range parts {
 		m, ok := cur.(map[string]interface{})
 		if !ok {
-			return false, fmt.Errorf("lookupBool: %q is not an object", key)
+			return false, errors.WrapError(
+				fmt.Errorf("lookupBool: %q is not an object", key),
+				errors.ErrExtraction,
+				"traverse object",
+			)
 		}
 		cur, ok = m[key]
 		if !ok {
-			return false, fmt.Errorf("lookupBool: missing field %q", key)
+			return false, errors.WrapError(
+				fmt.Errorf("lookupBool: missing field %q", key),
+				errors.ErrExtraction,
+				"find field",
+			)
 		}
 	}
 	b, ok := cur.(bool)
 	if !ok {
-		return false, fmt.Errorf("lookupBool: field %q is not a bool", path)
+		return false, errors.WrapError(
+			fmt.Errorf("lookupBool: field %q is not a bool", path),
+			errors.ErrExtraction,
+			"convert to boolean",
+		)
 	}
 	return b, nil
 }
