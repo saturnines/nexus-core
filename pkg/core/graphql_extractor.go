@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"strings"
 
 	"github.com/saturnines/nexus-core/pkg/config"
@@ -38,13 +39,17 @@ func NewGraphQLExtractor(g *config.GraphQLSource) *GraphQLExtractor {
 func (e *GraphQLExtractor) Items(b []byte) ([]interface{}, error) {
 	var raw interface{}
 	if err := json.Unmarshal(b, &raw); err != nil {
-		return nil, fmt.Errorf("failed to decode response JSON: %w", err)
+		return nil, errors.WrapError(err, errors.ErrHTTPResponse, "decode GraphQL response JSON")
 	}
 
 	// Navigate to the configured root
 	node, ok := ExtractFieldEnhanced(raw, e.rootPath)
 	if !ok || node == nil {
-		return nil, fmt.Errorf("root path '%s' not found", e.rootPath)
+		return nil, errors.WrapError(
+			fmt.Errorf("root path '%s' not found", e.rootPath),
+			errors.ErrExtraction,
+			"find GraphQL root path",
+		)
 	}
 
 	// Return array or single-object fallback
@@ -54,7 +59,11 @@ func (e *GraphQLExtractor) Items(b []byte) ([]interface{}, error) {
 	case map[string]interface{}:
 		return []interface{}{arr}, nil
 	default:
-		return nil, fmt.Errorf("root path '%s' does not point to array or object", e.rootPath)
+		return nil, errors.WrapError(
+			fmt.Errorf("root path '%s' does not point to array or object", e.rootPath),
+			errors.ErrExtraction,
+			"validate GraphQL root path type",
+		)
 	}
 }
 
