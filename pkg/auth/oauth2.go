@@ -129,7 +129,11 @@ func (o *OAuth2Auth) ApplyAuth(req *http.Request) error {
 		}
 	}
 	if o.accessToken == "" {
-		return fmt.Errorf("no valid access token available")
+		return errors.WrapError(
+			fmt.Errorf("no valid access token available"),
+			errors.ErrAuthentication,
+			"apply OAuth2 auth",
+		)
 	}
 	req.Header.Set("Authorization", "Bearer "+o.accessToken)
 	return nil
@@ -173,7 +177,7 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 	// Create and execute the request
 	req, err := http.NewRequest("POST", o.TokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return fmt.Errorf("failed to create token request: %w", err)
+		return errors.WrapError(err, errors.ErrHTTPRequest, "create token request")
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -182,22 +186,24 @@ func (o *OAuth2Auth) refreshAccessToken() error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("token request failed: %w", err)
+		return errors.WrapError(err, errors.ErrHTTPRequest, "execute token request")
 	}
 	defer resp.Body.Close()
 
 	// check response status
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("token request returned status %d: %s", resp.StatusCode, body)
+		return errors.WrapError(
+			fmt.Errorf("token request returned status %d: %s", resp.StatusCode, body),
+			errors.ErrHTTPResponse,
+			"token request failed",
+		)
 	}
-
 	// parse the response
 	var tokenResp TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return fmt.Errorf("failed to decode token response: %w", err)
+		return errors.WrapError(err, errors.ErrHTTPResponse, "decode token response")
 	}
-
 	// update token state
 	o.accessToken = tokenResp.AccessToken
 
