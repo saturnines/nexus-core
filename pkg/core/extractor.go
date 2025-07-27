@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"strconv"
 	"strings"
 )
@@ -72,12 +73,20 @@ func parsePath(path string) ([]PathSegment, error) {
 			remaining := part[idx:]
 			for len(remaining) > 0 {
 				if !strings.HasPrefix(remaining, "[") {
-					return nil, fmt.Errorf("invalid array notation in path: %s", part)
+					return nil, errors.WrapError(
+						fmt.Errorf("invalid array notation in path: %s", part),
+						errors.ErrConfiguration,
+						"parse field path",
+					)
 				}
 
 				endIdx := strings.Index(remaining, "]")
 				if endIdx == -1 {
-					return nil, fmt.Errorf("unclosed bracket in path: %s", part)
+					return nil, errors.WrapError(
+						fmt.Errorf("unclosed bracket in path: %s", part),
+						errors.ErrConfiguration,
+						"parse field path",
+					)
 				}
 
 				indexStr := remaining[1:endIdx]
@@ -91,7 +100,11 @@ func parsePath(path string) ([]PathSegment, error) {
 					// Parse numeric index
 					index, err := strconv.Atoi(indexStr)
 					if err != nil {
-						return nil, fmt.Errorf("invalid array index: %s", indexStr)
+						return nil, errors.WrapError(
+							fmt.Errorf("invalid array index: %s", indexStr),
+							errors.ErrConfiguration,
+							"parse array index",
+						)
 					}
 					segments = append(segments, PathSegment{
 						Type:  ArrayIndex,
@@ -110,7 +123,11 @@ func parsePath(path string) ([]PathSegment, error) {
 						break
 					} else {
 						// This is an error - text after ] without .
-						return nil, fmt.Errorf("invalid syntax after bracket: %s", remaining)
+						return nil, errors.WrapError(
+							fmt.Errorf("invalid syntax after bracket: %s", remaining),
+							errors.ErrConfiguration,
+							"parse field path",
+						)
 					}
 				}
 			}
@@ -213,7 +230,11 @@ func traversePath(data interface{}, segments []PathSegment) (interface{}, bool) 
 func ExtractFieldsMulti(data interface{}, path string) ([]interface{}, error) {
 	result, ok := ExtractFieldEnhanced(data, path)
 	if !ok {
-		return nil, fmt.Errorf("path not found: %s", path)
+		return nil, errors.WrapError(
+			fmt.Errorf("path not found: %s", path),
+			errors.ErrExtraction,
+			"extract field path",
+		)
 	}
 
 	// If result is already an array, return it
