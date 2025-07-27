@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 	"sync"
 
@@ -37,19 +38,39 @@ func NewPager(
 ) (pagination.Pager, error) {
 	// Validate inputs
 	if builder == nil {
-		return nil, fmt.Errorf("builder cannot be nil")
+		return nil, errors.WrapError(
+			fmt.Errorf("builder cannot be nil"),
+			errors.ErrConfiguration,
+			"create GraphQL pager",
+		)
 	}
 	if client == nil {
-		return nil, fmt.Errorf("client cannot be nil")
+		return nil, errors.WrapError(
+			fmt.Errorf("client cannot be nil"),
+			errors.ErrConfiguration,
+			"create GraphQL pager",
+		)
 	}
 	if cursorKey == "" {
-		return nil, fmt.Errorf("cursorKey cannot be empty")
+		return nil, errors.WrapError(
+			fmt.Errorf("cursorKey cannot be empty"),
+			errors.ErrConfiguration,
+			"create GraphQL pager",
+		)
 	}
 	if len(nextPath) == 0 {
-		return nil, fmt.Errorf("nextPath cannot be empty")
+		return nil, errors.WrapError(
+			fmt.Errorf("nextPath cannot be empty"),
+			errors.ErrConfiguration,
+			"create GraphQL pager",
+		)
 	}
 	if len(hasNextPath) == 0 {
-		return nil, fmt.Errorf("hasNextPath cannot be empty")
+		return nil, errors.WrapError(
+			fmt.Errorf("hasNextPath cannot be empty"),
+			errors.ErrConfiguration,
+			"create GraphQL pager",
+		)
 	}
 
 	return &GraphQLPager{
@@ -104,7 +125,7 @@ func (p *GraphQLPager) UpdateState(resp *http.Response) error {
 
 	var data map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return fmt.Errorf("failed to decode GraphQL response: %w", err)
+		return errors.WrapError(err, errors.ErrHTTPResponse, "decode GraphQL pager response")
 	}
 
 	p.mu.Lock()
