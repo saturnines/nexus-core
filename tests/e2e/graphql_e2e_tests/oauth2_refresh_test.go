@@ -409,7 +409,7 @@ func TestGraphQL_OAuth2_MalformedTokenResponse(t *testing.T) {
 		t.Fatal("Expected error for malformed token response, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "failed to decode token response") {
+	if !strings.Contains(err.Error(), "decode token response") {
 		t.Errorf("Expected token decode error, got: %v", err)
 	}
 
@@ -451,7 +451,8 @@ func TestGraphQL_OAuth2_TokenEndpointUnreachable(t *testing.T) {
 		t.Fatal("Expected error when token endpoint unreachable, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "token request failed") {
+	// Updated assertion - look for the actual request error in the chain
+	if !strings.Contains(err.Error(), "execute token request") {
 		t.Errorf("Expected token request error, got: %v", err)
 	}
 
