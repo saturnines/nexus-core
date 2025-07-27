@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -53,13 +54,25 @@ type TokenResponse struct {
 // NewOAuth2Auth creates a new OAuth2 auth handler
 func NewOAuth2Auth(tokenURL, clientID, clientSecret, scope string, extraParams map[string]string, refreshBefore int) (*OAuth2Auth, error) {
 	if tokenURL == "" {
-		return nil, fmt.Errorf("token URL is required for OAuth2")
+		return nil, errors.WrapError(
+			fmt.Errorf("token URL is required"),
+			errors.ErrConfiguration,
+			"create OAuth2 auth",
+		)
 	}
 	if clientID == "" {
-		return nil, fmt.Errorf("client ID is required for OAuth2")
+		return nil, errors.WrapError(
+			fmt.Errorf("client ID is required"),
+			errors.ErrConfiguration,
+			"create OAuth2 auth",
+		)
 	}
 	if clientSecret == "" {
-		return nil, fmt.Errorf("client secret is required for OAuth2")
+		return nil, errors.WrapError(
+			fmt.Errorf("client secret is required"),
+			errors.ErrConfiguration,
+			"create OAuth2 auth",
+		)
 	}
 
 	auth := &OAuth2Auth{
