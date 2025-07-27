@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 )
 
@@ -21,7 +22,11 @@ func NewBearerAuth(token string) *BearerAuth {
 func (b *BearerAuth) ApplyAuth(req *http.Request) error {
 	// Validate inputs
 	if b.Token == "" {
-		return fmt.Errorf("token is empty and is required for bearer auth")
+		return errors.WrapError(
+			fmt.Errorf("token is required"),
+			errors.ErrConfiguration,
+			"apply bearer auth",
+		)
 	}
 
 	// Set the auth  header with the bearer token
