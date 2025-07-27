@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"github.com/saturnines/nexus-core/pkg/errors"
 	"net/http"
 )
 
@@ -31,7 +32,11 @@ func NewAPIKeyAuth(headerName, queryParam, value string) *APIKeyAuth {
 func (a *APIKeyAuth) ApplyAuth(req *http.Request) error {
 	// check that we have a value to use
 	if a.Value == "" {
-		return fmt.Errorf("API key value is required")
+		return errors.WrapError(
+			fmt.Errorf("API key value is required"),
+			errors.ErrConfiguration,
+			"apply API key auth",
+		)
 	}
 
 	// If header name is added, add as a request header
@@ -48,7 +53,11 @@ func (a *APIKeyAuth) ApplyAuth(req *http.Request) error {
 
 	// If neither header nor query param was entered just return an error
 	if a.HeaderName == "" && a.QueryParam == "" {
-		return fmt.Errorf("API key auth requires either header name or query parameter name")
+		return errors.WrapError(
+			fmt.Errorf("API key auth requires either header name or query parameter name"),
+			errors.ErrConfiguration,
+			"apply API key auth",
+		)
 	}
 
 	return nil
