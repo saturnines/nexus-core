@@ -3,20 +3,29 @@ package auth
 import (
 	"fmt"
 	"github.com/saturnines/nexus-core/pkg/config"
+	"github.com/saturnines/nexus-core/pkg/errors"
 )
 
 // Creator functions for auth handlers
 
 func createBasicAuth(authConfig *config.Auth) (Handler, error) {
 	if authConfig.Basic == nil {
-		return nil, fmt.Errorf("basic auth configuration is required")
+		return nil, errors.WrapError(
+			fmt.Errorf("basic auth configuration is required"),
+			errors.ErrConfiguration,
+			"create basic auth",
+		)
 	}
 	return NewBasicAuth(authConfig.Basic.Username, authConfig.Basic.Password), nil
 }
 
 func createAPIKeyAuth(authConfig *config.Auth) (Handler, error) {
 	if authConfig.APIKey == nil {
-		return nil, fmt.Errorf("api key configuration is required")
+		return nil, errors.WrapError(
+			fmt.Errorf("api key configuration is required"),
+			errors.ErrConfiguration,
+			"create API key auth",
+		)
 	}
 	return NewAPIKeyAuth(
 		authConfig.APIKey.Header,
@@ -27,14 +36,22 @@ func createAPIKeyAuth(authConfig *config.Auth) (Handler, error) {
 
 func createBearerAuth(authConfig *config.Auth) (Handler, error) {
 	if authConfig.Bearer == nil {
-		return nil, fmt.Errorf("bearer token configuration is required")
+		return nil, errors.WrapError(
+			fmt.Errorf("bearer token configuration is required"),
+			errors.ErrConfiguration,
+			"create bearer auth",
+		)
 	}
 	return NewBearerAuth(authConfig.Bearer.Token), nil
 }
 
 func createOAuth2Auth(authConfig *config.Auth) (Handler, error) {
 	if authConfig.OAuth2 == nil {
-		return nil, fmt.Errorf("oauth2 configuration is required")
+		return nil, errors.WrapError(
+			fmt.Errorf("oauth2 configuration is required"),
+			errors.ErrConfiguration,
+			"create OAuth2 auth",
+		)
 	}
 
 	refreshBefore := 60 // Default
