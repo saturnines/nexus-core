@@ -169,7 +169,7 @@ func lookupInt(body map[string]interface{}, path string) (int, error) {
 		}
 	}
 
-	// Handle different number types from JSON ( this is ugly as fuck but whatever.)
+	// Handle different number types from JSON
 	switch v := cur.(type) {
 	case float64:
 		return int(v), nil

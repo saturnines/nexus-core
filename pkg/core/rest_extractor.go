@@ -38,7 +38,11 @@ func (e *RestExtractor) Items(raw []byte) ([]interface{}, error) {
 		return e.extractItems(objMap)
 	}
 
-	return nil, fmt.Errorf("unexpected response format: %T", responseData)
+	return nil, errors.WrapError(
+		fmt.Errorf("unexpected response format: %T", responseData),
+		errors.ErrHTTPResponse,
+		"parse response data",
+	)
 }
 
 func (e *RestExtractor) extractItems(responseData map[string]interface{}) ([]interface{}, error) {
@@ -55,12 +59,20 @@ func (e *RestExtractor) extractItems(responseData map[string]interface{}) ([]int
 
 	root, ok := ExtractFieldEnhanced(responseData, rp)
 	if !ok {
-		return nil, fmt.Errorf("root path '%s' not found", rp)
+		return nil, errors.WrapError(
+			fmt.Errorf("root path '%s' not found", rp),
+			errors.ErrExtraction,
+			"find root path",
+		)
 	}
 
 	items, ok := root.([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("root path '%s' is not an array", rp)
+		return nil, errors.WrapError(
+			fmt.Errorf("root path '%s' is not an array", rp),
+			errors.ErrExtraction,
+			"validate root path type",
+		)
 	}
 
 	return items, nil
