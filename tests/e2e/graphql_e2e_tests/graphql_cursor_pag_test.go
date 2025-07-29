@@ -179,6 +179,8 @@ func TestGraphQL_CursorPagination_ComplexNesting(t *testing.T) {
 		variables, _ := gqlReq["variables"].(map[string]interface{})
 		cursor, _ := variables["after"].(string)
 
+		t.Logf("Complex nesting request %d: after='%s'", requestCount, cursor)
+
 		var response map[string]interface{}
 
 		if cursor == "" {
@@ -222,7 +224,7 @@ func TestGraphQL_CursorPagination_ComplexNesting(t *testing.T) {
 					},
 				},
 			}
-		} else {
+		} else if cursor == "Y3Vyc29yOnYyOpHOAg==" {
 			// Second page
 			response = map[string]interface{}{
 				"data": map[string]interface{}{
@@ -266,31 +268,31 @@ func TestGraphQL_CursorPagination_ComplexNesting(t *testing.T) {
 			GraphQLConfig: &config.GraphQLSource{
 				Endpoint: mockServer.URL,
 				Query: `
-					query GetIssues($after: String) {
-						repository(owner: "example", name: "repo") {
-							issues(first: 10, after: $after) {
-								totalCount
-								edges {
-									node {
-										id
-										title
-										number
-										author {
-											login
-										}
-									}
-									cursor
-								}
-								pageInfo {
-									startCursor
-									endCursor
-									hasNextPage
-									hasPreviousPage
-								}
-							}
-						}
-					}
-				`,
+                    query GetIssues($after: String) {
+                        repository(owner: "example", name: "repo") {
+                            issues(first: 10, after: $after) {
+                                totalCount
+                                edges {
+                                    node {
+                                        id
+                                        title
+                                        number
+                                        author {
+                                            login
+                                        }
+                                    }
+                                    cursor
+                                }
+                                pageInfo {
+                                    startCursor
+                                    endCursor
+                                    hasNextPage
+                                    hasPreviousPage
+                                }
+                            }
+                        }
+                    }
+                `,
 				Variables: map[string]interface{}{
 					"after": nil, // Will be set by pagination
 				},
@@ -304,13 +306,13 @@ func TestGraphQL_CursorPagination_ComplexNesting(t *testing.T) {
 						{Name: "cursor", Path: "cursor"},
 					},
 				},
-				Pagination: &config.Pagination{
-					Type:        config.PaginationTypeCursor,
-					CursorParam: "after",
-					CursorPath:  "repository.issues.pageInfo.endCursor",
-					HasMorePath: "repository.issues.pageInfo.hasNextPage",
-				},
 			},
+		},
+		Pagination: &config.Pagination{
+			Type:        config.PaginationTypeCursor,
+			CursorParam: "after", // Match the GraphQL variable name!
+			CursorPath:  "data.repository.issues.pageInfo.endCursor",
+			HasMorePath: "data.repository.issues.pageInfo.hasNextPage",
 		},
 	}
 
@@ -479,13 +481,14 @@ func TestGraphQL_CursorPagination_ErrorHandling(t *testing.T) {
 						{Name: "id", Path: "node.id"},
 					},
 				},
-				Pagination: &config.Pagination{
-					Type:        config.PaginationTypeCursor,
-					CursorParam: "cursor",
-					CursorPath:  "users.pageInfo.endCursor",
-					HasMorePath: "users.pageInfo.hasNextPage",
-				},
 			},
+		},
+
+		Pagination: &config.Pagination{
+			Type:        config.PaginationTypeCursor,
+			CursorParam: "cursor",
+			CursorPath:  "data.users.pageInfo.endCursor",
+			HasMorePath: "data.users.pageInfo.hasNextPage", // Note: needs "data." prefix
 		},
 	}
 
@@ -575,13 +578,14 @@ func TestGraphQL_CursorPagination_SpecialCharacters(t *testing.T) {
 						{Name: "id", Path: "node.id"},
 					},
 				},
-				Pagination: &config.Pagination{
-					Type:        config.PaginationTypeCursor,
-					CursorParam: "cursor",
-					CursorPath:  "items.pageInfo.endCursor",
-					HasMorePath: "items.pageInfo.hasNextPage",
-				},
 			},
+		},
+		// MOVE PAGINATION HERE - at Pipeline level
+		Pagination: &config.Pagination{
+			Type:        config.PaginationTypeCursor,
+			CursorParam: "cursor",
+			CursorPath:  "data.items.pageInfo.endCursor",   // Note: needs "data." prefix
+			HasMorePath: "data.items.pageInfo.hasNextPage", // Note: needs "data." prefix
 		},
 	}
 
