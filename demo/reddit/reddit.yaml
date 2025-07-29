@@ -1,0 +1,25 @@
+name: reddit-golang-posts
+source:
+  type: rest
+  endpoint: https://www.reddit.com/r/golang.json
+  headers:
+    User-Agent: Nexus-Core-Demo/0.1.0
+  response_mapping:
+    root_path: data.children
+    fields:
+      - name: number
+        path: data.id
+      - name: title
+        path: data.title
+      - name: author
+        path: data.author
+      - name: score
+        path: data.score
+      - name: comments
+        path: data.num_comments
+      - name: created
+        path: data.created_utc
+      - name: subreddit
+        path: data.subreddit
+      - name: url
+        path: data.url
