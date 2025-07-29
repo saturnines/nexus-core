@@ -128,6 +128,16 @@ func (p *GraphQLPager) UpdateState(resp *http.Response) error {
 		return errors.WrapError(err, errors.ErrHTTPResponse, "decode GraphQL pager response")
 	}
 
+	if errorsField, ok := data["errors"]; ok && errorsField != nil {
+		bodyBytes, err := json.Marshal(data)
+		if err != nil {
+			return errors.WrapError(err, errors.ErrHTTPResponse, "marshal GraphQL error response")
+		}
+		if err := errors.CheckGraphQLErrors(bodyBytes); err != nil {
+			return err
+		}
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
