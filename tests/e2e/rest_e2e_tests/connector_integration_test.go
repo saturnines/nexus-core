@@ -1749,7 +1749,7 @@ func TestConnector_MalformedJSON_UnclosedAndSyntaxErrors(t *testing.T) {
 				t.Fatalf("Expected error for malformed JSON (%s), got nil", tt.description)
 			}
 
-			// Check if specifically reponse is an ErrHTTPResponse
+			// Check if specifically response  is an ErrHTTPResponse
 			if !errors2.Is(err, errors2.ErrHTTPResponse) {
 				t.Errorf("Expected ErrHTTPResponse, got error type: %T", err)
 			}
