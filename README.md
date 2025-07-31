@@ -1,7 +1,7 @@
 # Nexus Core
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/saturnines/nexus-core)](https://golang.org/)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![License](https://img.shields.io/github/license/saturnines/nexus-core.svg)](https://github.com/saturnines/nexus-core/blob/main/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/saturnines/nexus-core)](https://goreportcard.com/report/github.com/saturnines/nexus-core)
 [![GitHub release](https://img.shields.io/github/release/saturnines/nexus-core.svg)](https://github.com/saturnines/nexus-core/releases)
 
