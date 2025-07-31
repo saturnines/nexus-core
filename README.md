@@ -1,24 +1,24 @@
 # Nexus Core
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/saturnines/nexus-core)](https://golang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Go Report Card](https://goreportcard.com/badge/github.com/saturnines/nexus-core)](https://goreportcard.com/report/github.com/saturnines/nexus-core)
 [![GitHub release](https://img.shields.io/github/release/saturnines/nexus-core.svg)](https://github.com/saturnines/nexus-core/releases)
 
 A universal API data extractor built in Go. Configure any REST/GraphQL API with YAML and extract all data automatically with built-in pagination, authentication, and error handling.
 
-## ✨ Features
+## Features
 
-- **🔌 Universal API Support** - Works with any REST or GraphQL API
-- **🔐 Authentication** - Basic, Bearer, API Key, OAuth2 with automatic token refresh
-- **📄 Smart Pagination** - Cursor, offset, page-based, and link header pagination
-- **🎯 Advanced Field Extraction** - JSONPath with nested objects, arrays, and wildcards
-- **🔄 Automatic Retries** - Exponential backoff with configurable retry policies
-- **⚡ Rate Limit Handling** - Detects 429 responses (more APIs coming soon)
-- **🔒 OAuth2 Token Management** - Automatic token refresh and caching
-- **🛡️ Reliable** - Comprehensive error handling and logging
+- **Universal API Support** - Works with any REST or GraphQL API
+- **Authentication** - Basic, Bearer, API Key, OAuth2 with automatic token refresh
+- **Smart Pagination** - Cursor, offset, page-based, and link header pagination
+- **Advanced Field Extraction** - JSONPath with nested objects, arrays, and wildcards
+- **Automatic Retries** - Exponential backoff with configurable retry policies
+- **Rate Limit Handling** - Detects 429 responses (more APIs coming soon)
+- **OAuth2 Token Management** - Automatic token refresh and caching
+- **Reliable** - Comprehensive error handling and logging
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -73,7 +73,7 @@ func main() {
 }
 ```
 
-## 📖 Configuration Examples
+## Configuration Examples
 
 ### REST API with Authentication
 
@@ -216,7 +216,7 @@ source:
         path: department.manager.contact.email
 ```
 
-## 🔧 Authentication Methods
+## Authentication Methods
 
 ### Basic Authentication
 ```yaml
@@ -266,7 +266,7 @@ auth:
       audience: "https://api.example.com"
 ```
 
-## 📄 Pagination Support
+## Pagination Support
 
 ### Cursor-Based Pagination
 ```yaml
@@ -304,7 +304,7 @@ pagination:
   link_header: true
 ```
 
-## 🔄 Error Handling & Retries
+## Error Handling & Retries
 
 ```yaml
 retry_config:
@@ -314,31 +314,31 @@ retry_config:
   retryable_statuses: [429, 502, 503, 504]
 ```
 
-## 🧪 Tested APIs
+## Tested APIs
 
 Nexus Core has been tested with these APIs:
 
-- ✅ **Stripe** - Payment processing
-- ✅ **Shopify** - E-commerce platform
-- ✅ **Reddit** - Social media
-- ✅ **GitHub** - Code repositories
-- ✅ **JSONPlaceholder** - Testing API
-- ✅ **Linear** - Project management
-- ⚠️ **Salesforce** - Known compatibility issues ("working" on it!)
+- **Stripe** - Payment processing
+- **Shopify** - E-commerce platform
+- **Reddit** - Social media
+- **GitHub** - Code repositories
+- **JSONPlaceholder** - Testing API
+- **Linear** - Project management
+- **Salesforce** - Known compatibility issues ("working" on it!)
 
 *Note: Some complex enterprise APIs may require additional configuration.*
 
 See our [Alexandria](https://github.com/saturnines/Alexandria) repository for more API configurations.
 
-## 📚 Examples
+## Examples
 
-Check out the [`demo/`](demo/) directory for working examples:
+Check out the `demo/` directory for working examples:
 
-- [`demo/reddit/`](demo/reddit/) - Reddit API extraction
-- [`demo/shopify/`](demo/shopify/) - Shopify products with authentication
-- [`demo/stripe-simple/`](demo/stripe-simple/) - Stripe customers with pagination
+- `demo/reddit/` - Reddit API extraction
+- `demo/shopify/` - Shopify products with authentication
+- `demo/stripe-simple/` - Stripe customers with pagination
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
@@ -351,20 +351,20 @@ Check out the [`demo/`](demo/) directory for working examples:
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-## 📄 License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Inspired by modern ETL tools and the need for simple API integration
-- Built with ❤️ for the Go community
+- Built with care for the Go community
 - Special thanks to all our contributors and testers
 
 ---
 
-**Questions?** Open an issue or start a discussion. 
+**Questions?** Open an issue or start a discussion.
