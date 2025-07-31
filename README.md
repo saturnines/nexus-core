@@ -359,12 +359,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
-
-- Inspired by modern ETL tools and the need for simple API integration
-- Built with care for the Go community
-- Special thanks to all our contributors and testers
-
 ---
 
 **Questions?** Open an issue or start a discussion.
