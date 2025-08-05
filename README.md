@@ -14,9 +14,8 @@ A universal API data extractor built in Go. Configure any REST/GraphQL API with 
 - **Smart Pagination** - Cursor, offset, page-based, and link header pagination
 - **Advanced Field Extraction** - JSONPath with nested objects, arrays, and wildcards
 - **Automatic Retries** - Exponential backoff with configurable retry policies
-- **Rate Limit Handling** - Detects 429 responses (more APIs coming soon)
+- **Rate Limit Handling** - Detects 429 responses 
 - **OAuth2 Token Management** - Automatic token refresh and caching
-- **Reliable** - Comprehensive error handling and logging
 
 ## Quick Start
 
@@ -328,8 +327,6 @@ Nexus Core has been tested with these APIs:
 
 *Note: Some complex enterprise APIs may require additional configuration.*
 
-See our [Alexandria](https://github.com/saturnines/Alexandria) repository for more API configurations.
-
 ## Examples
 
 Check out the `demo/` directory for working examples:
@@ -337,23 +334,6 @@ Check out the `demo/` directory for working examples:
 - `demo/reddit/` - Reddit API extraction
 - `demo/shopify/` - Shopify products with authentication
 - `demo/stripe-simple/` - Stripe customers with pagination
-
-## Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   YAML Config   │───▶│  Nexus Core      │───▶│   Extracted     │
-│                 │    │                  │    │   Data          │
-│ • Source        │    │ • Authentication │    │                 │
-│ • Auth          │    │ • Pagination     │    │ []map[string]   │
-│ • Pagination    │    │ • Field Mapping  │    │ interface{}     │
-│ • Field Mapping │    │ • Error Handling │    │                 │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## License
 
