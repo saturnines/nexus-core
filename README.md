@@ -342,3 +342,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 **Questions?** Open an issue or start a discussion.
 
+** Disclaimer** 
+
+Please do not use this in production unless you vetted it. 
+It's still quite far from it but this is still quite nice for making pipelines with most apis in like 5-10 minutes.
