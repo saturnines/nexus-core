@@ -9,13 +9,12 @@ A universal API data extractor built in Go. Configure any REST/GraphQL API with 
 
 ## Features
 
-- **Universal API Support** - Works with any REST or GraphQL API
+- **Universal API Support** - Works with any (most) REST or GraphQL API
 - **Authentication** - Basic, Bearer, API Key, OAuth2 with automatic token refresh
 - **Smart Pagination** - Cursor, offset, page-based, and link header pagination
 - **Advanced Field Extraction** - JSONPath with nested objects, arrays, and wildcards
 - **Automatic Retries** - Exponential backoff with configurable retry policies
-- **Rate Limit Handling** - Detects 429 responses 
-- **OAuth2 Token Management** - Automatic token refresh and caching
+- **Rate Limit Handling** - Detects 429 responses.
 
 ## Quick Start
 
